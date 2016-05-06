@@ -101,20 +101,30 @@ save.image("Pre_network_data.RData")
 # 
 # load(file="./Pre_network_data.RData")
 # 
-# sft=pickSoftThreshold(datExpr0, powerVector=powers, verbose=5, networkType="signed hybrid", corFnc = "bicor",corOptions = list(use = 'p', maxPOutliers = 0.1), blockSize = 30000) 
+# sft=pickSoftThreshold(datExpr0, powerVector=powers, verbose=5, networkType="signed", corFnc = "bicor",corOptions = list(use = 'p', maxPOutliers = 0.1), blockSize = 30000)       
 # 
 # 
 # net = blockwiseModules(datExpr0, power = 13,
-#                        networkType="signed hybrid", minModuleSize = 50, maxBlockSize = 30000,
-#                        mergeCutHeight = 0.20,deepsplit=3, corType= "bicor",corOptions = list(use = 'p', maxPOutliers = 0.1),
+#                        networkType="signed", minModuleSize = 20, maxBlockSize = 30000,       
+#                        mergeCutHeight = 0.2,deepsplit=4, corType= "bicor",corOptions = list(use = 'p', maxPOutliers = 0.1),
 #                        numericLabels = TRUE, pamRespectsDendro = FALSE,
 #                        saveTOMs = TRUE,
 #                        saveTOMFileBase = "./TOM/TOM",
 #                        verbose = 3 )
+# 
+# table(net$colors)
 # save.image("./Post_network.RData")
 ##############################################################################
 
+load(file="./Data/Post_network.RData")
 
+lncRNA_filter = c("3prime_overlapping_ncrna", "antisense", "lincRNA", "processed_transcript", "sense_intronic" , "sense_overlapping")
+
+lnc_test=c()
+for (biotype in genelist$biotype) {
+    lnc_test =c(lnc_test, (sum(grepl(biotype, lncRNA_filter)) > 0))
+}
+genelist$lncRNA = lnc_test
 
 
 
@@ -140,7 +150,7 @@ nSamples=nrow(datExpr0)
 ## calculate MEs with module colors
 MEs0 <-moduleEigengenes(datExpr0,moduleColors)$eigengenes
 MEs = orderMEs(MEs0)
-moduleTraitCor = cor(MEs, clinical[,-c(3:25)], use = "p");
+moduleTraitCor = cor(MEs, clinical[,c(1:2)], use = "p");
 moduleTraitPvalue = corPvalueStudent(moduleTraitCor, nSamples);
 
 pdf("./Figures/Module-trait_relationships.pdf",width=14,height=7)
@@ -150,7 +160,7 @@ dim(textMatrix) = dim(moduleTraitCor)
 par(mar = c(6, 8.5, 3, 3));
 
 labeledHeatmap(Matrix = moduleTraitCor,
-               xLabels = names(clinical[,-c(3:25)]),
+               xLabels = names(clinical[, c(1:2)]),
                yLabels = names(MEs),
                ySymbols = names(MEs),
                colorLabels = FALSE,
@@ -159,7 +169,7 @@ labeledHeatmap(Matrix = moduleTraitCor,
                setStdMargins = FALSE,
                cex.text = 0.5,
                zlim = c(-1,1),
-               main = paste("Module-trait relationships"))
+               main = paste("Module-trait relationships") )
 
 dev.off()
 
@@ -170,7 +180,7 @@ geneModuleMembership = as.data.frame(cor(datExpr0, MEs, use = "p"));
 
 
 genes<-colnames(datExpr0)
-genes2annot <- match(genes,genelist_data$Ensembl)
+genes2annot <- match(genes,genelist$ensembl_gene_id)
 sum(is.na(genes2annot))
 
 
@@ -183,11 +193,11 @@ GSPvalue = as.data.frame(corPvalueStudent(as.matrix(geneTraitSignificance), nSam
 names(geneTraitSignificance) = paste("GS.", names(age), sep="");
 names(GSPvalue) = paste("p.GS.", names(age), sep="");
 
-geneInfo= data.frame(Ensembl_ID = genelist_data$Ensembl,
-                     gene_symbol= genelist_data$Gene,
-                     Log2FC_DE = genelist_data$DEG_FC,
-                     lncRNA=genelist_data$lncRNA,
-                     ASD=genelist_data$ASD_score,
+geneInfo= data.frame(Ensembl_ID = genelist$ensembl_gene_id,
+                     gene_symbol= genelist$gene_symbol,
+                     Log2FC_DE = genelist$L2FC,
+                     lncRNA=genelist$lncRNA,
+                     ASD=genelist$ASD_score,
                      moduleColor = moduleColors,
                      geneTraitSignificance,
                      GSPvalue)
@@ -203,29 +213,11 @@ for (mod in 1:ncol(geneModuleMembership))
 }
 geneOrder = order(geneInfo$moduleColor, -abs(geneInfo$GS.Months_Age));
 geneInfo = geneInfo[geneOrder, ]
-write.csv(geneInfo, file = "./Data/geneInfo.csv")
+write.csv(geneInfo, file = "./Data/geneInfo.csv",row.names = FALSE )
 
-save.image("./Data/ASD_network.RData")
+#save.image("./Data/ASD_network.RData")
 
-# setwd("Id_lncRNA/Full")
-# IDs<-Bspan_genes$ensembl_gene_id[Bspan_genes$lncRNA==1]
-# ID_genes<-as.character(Bspan_genes$ensembl_gene_id[Bspan_genes$ID_ALL==1])
-# setwd("CNV")
-# source("http://bioconductor.org/biocLite.R")
-# #biocLite("biomaRt")
-# library(biomaRt)
-# #biocLite("GenomicRanges")
-# library("GenomicRanges")
-# 
-# ensembl = useMart("ensembl",dataset="hsapiens_gene_ensembl")
-# Bspan_locs <- getBM(attributes = c("ensembl_gene_id","chromosome_name","start_position","end_position","strand","band"),
-#                        filters = "ensembl_gene_id", values = Bspan_rows$ensembl_gene_id,
-#                        mart = ensembl)
-# 
-# CNVs <-read.csv("Raw/SFARI/individual-data.csv.csv") ##7/24
 
-#setwd("ASD")
-#load(file="Data/ASD_network.RData")
 ##############################
 library(gplots)
 library(RColorBrewer)

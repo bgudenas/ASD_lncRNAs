@@ -39,7 +39,7 @@ lncRNA_filter = c("3prime_overlapping_ncrna", "antisense", "lincRNA", "processed
 
 lnc_test=c()
 for (biotype in res_sig$biotype) {
-    lnc_test =c(lnc_test, (sum(grepl(biotype, lncRNA_filter)) > 0))
+    lnc_test =c(lnc_test, (sum(grepl(biotype, lncRNA_filter)) > 0 ) )
 }
 res_sig$lncRNA = lnc_test
 
