@@ -1,4 +1,8 @@
 #5/3/16
+#### load WGCNA v1.46
+library(WGCNA)
+options(stringsAsFactors=FALSE)
+enableWGCNAThreads()
 
 workdir = "C:/Users/Brian/Documents/RNAseq/Autism/WGCNA/"
 setwd(workdir)
@@ -13,11 +17,6 @@ scores<-read.csv("./RAW/SFARI/gene-score.csv") #SFARI ASD risk gene scores
 
 score_match = match(scores$Gene.Symbol, SFARI$Gene.Symbol)
 scores$entrez = SFARI$Entrez.GeneID[score_match]
-
-#### load WGCNA v1.46
-library(WGCNA)
-options(stringsAsFactors=FALSE)
-enableWGCNAThreads()
 
 
 ## load expression matrix and sample metadata
@@ -227,33 +226,35 @@ library(RColorBrewer)
 genelist$ASD_score = as.character(genelist$ASD_score)
 genelist$ASD_score[is.na(genelist$ASD_score)]=0
 
-mod_sum<-matrix(data=NA,nrow=length(table(moduleColors)),ncol=5)
-colnames(mod_sum) <- c("PC_DE","LncRNAs_DE","ASD_high","ASD_Full","total")
+mod_sum<-matrix(data=NA,nrow=length(table(moduleColors)),ncol=4)
+colnames(mod_sum) <- c("LncRNAs_DE","ASD_high","ASD_Full","total")
 rownames(mod_sum) <- as.list(names(table(moduleColors)))
 
-LncRNAs <-as.list(table(factor(moduleColors[genelist$lncRNA== TRUE & genelist$L2FC == 0],lev=rownames(mod_sum))))
-DE_PC = table(factor(moduleColors[genelist$lncRNA== FALSE & genelist$L2FC != 0],lev=rownames(mod_sum)))
-mod_sum[,1] = as.numeric(DE_PC)
+# LncRNAs <-as.list(table(factor(moduleColors[genelist$lncRNA== TRUE & genelist$L2FC == 0],lev=rownames(mod_sum))))
+# DE_PC = table(factor(moduleColors[genelist$lncRNA== FALSE & genelist$L2FC != 0],lev=rownames(mod_sum)))
+# mod_sum[,1] = as.numeric(DE_PC)
 
 LncRNAs_DE = as.list(table(factor(moduleColors[genelist$lncRNA== TRUE & genelist$L2FC != 0],lev=rownames(mod_sum))))
-mod_sum[,2] = as.numeric(LncRNAs_DE)
+mod_sum[,1] = as.numeric(LncRNAs_DE)
 
 ASD_high = table(factor(moduleColors[genelist$ASD_score==1 | genelist$ASD_score==2  | genelist$ASD_score==3 | genelist$ASD_score==4 ],lev=rownames(mod_sum)))
-mod_sum[,3] = as.numeric(ASD_high)
+mod_sum[,2] = as.numeric(ASD_high)
 
 #ASD_syndromic = as.list(table(factor(moduleColors[!is.na( genelist$ASD_score[ genelist$ASD_score=="1S" | genelist$ASD_score=="2S" | genelist$ASD_score=="3S" | genelist$ASD_score=="4S" | genelist$ASD_score=="S" ])], lev=rownames(mod_sum))))
 ASD_Full = table(factor(moduleColors[genelist$ASD_score=="1S" | genelist$ASD_score=="2S" | genelist$ASD_score=="3S" | genelist$ASD_score=="4S" | genelist$ASD_score==1 | genelist$ASD_score==2  | genelist$ASD_score==3 | genelist$ASD_score==4 | genelist$ASD_score == 5 ],lev=rownames(mod_sum)))
-mod_sum[,4] = as.numeric(ASD_Full)
+mod_sum[,3] = as.numeric(ASD_Full)
 
 mod_totals <- as.list(table(moduleColors))
-mod_sum[,5]= as.numeric(mod_totals)
+mod_sum[,4]= as.numeric(mod_totals)
+
+mod_sum = mod_sum[mod_sum[,1] > 0,] ### this removes all modules without lncRNAs to lower the # of statiscal tests sense we are only testing for alternative = greater
 
 total_genes = nGenes
-mat_p = matrix(data=NA, nrow=nrow(mod_sum), ncol=4)
-mat_or = matrix(data=NA, nrow=nrow(mod_sum), ncol=4)
+mat_p = matrix(data=NA, nrow=nrow(mod_sum), ncol=3)
+mat_or = matrix(data=NA, nrow=nrow(mod_sum), ncol=3)
 for (row in 1:nrow(mod_sum)){
-    for (col in 1:4) {
-        mod_total <- as.numeric(mod_sum[row,5])
+    for (col in 1:3) {
+        mod_total <- as.numeric(mod_sum[row,4])
         mod_count <- as.numeric(mod_sum[row,col])
         mod_non <- mod_total-mod_count
         non_count <- sum(as.numeric(mod_sum[,col])) - mod_count       
@@ -271,8 +272,8 @@ for (row in 1:nrow(mod_sum)){
 
 rownames(mat_p)<-rownames(mod_sum)
 rownames(mat_or)<-rownames(mod_sum)
-colnames(mat_p)<-colnames(mod_sum)[1:4]
-colnames(mat_or)<-colnames(mod_sum)[1:4]
+colnames(mat_p)<-colnames(mod_sum)[1:3]
+colnames(mat_or)<-colnames(mod_sum)[1:3]
 
 ad_p<-c()
 
@@ -289,15 +290,15 @@ col_breaks = c(seq(0,1.2,length=100), # for red
                seq(1.2,2,length=100), # for yellow
                seq(2,6,length=100)) # for green
 
-OR_filter<-matrix(data=NA,ncol=4,nrow=nrow(log_p))
+OR_filter<-matrix(data=NA,ncol=3,nrow=nrow(log_p))
 OR_filter[mat_or >= 1 &log_p >= 1.3]<-round(mat_or[mat_or >= 1 & log_p>= 1.3],2)
 
 rownames(OR_filter)<-rownames(log_p)
 
-pdf("Figures/module_gene-enrichment_ID.pdf")
+pdf("./Figures/concise_module_geneset_enrichment.pdf")
 par(mar=c(5,2,3,5))
 
-heatmap.2(log_p,cellnote=OR_filter,trace="none",main="Risk gene Enrichment",RowSideColors=rownames(log_p),notecol="black",key=TRUE,col=my_palette,symm=F,symkey=F,symbreaks=F,scale="column")
+heatmap.2(log_p,cellnote=OR_filter,trace="none",main="Risk gene Enrichment",RowSideColors=rownames(log_p),notecol="black",key=TRUE,col=my_palette,symm=F,symkey=F,symbreaks=F)
 #heatmap.2(log_p[rowSums(OR_filter[,-c(1,6)],na.rm=TRUE)!=0,-c(1,6)],cellnote=OR_filter[rowSums(OR_filter[,-c(1,6)],na.rm=TRUE)!=0,-c(1,6)],margins=c(8,6),trace="none",main="Risk gene Enrichment",RowSideColors=rownames(log_p[rowSums(OR_filter[,-c(1,6)],na.rm=TRUE)!=0,-c(1,6)]),notecol="black",key=TRUE,col=my_palette,symm=F,symkey=F,symbreaks=F)
 dev.off()
 
@@ -322,21 +323,6 @@ names(G_SFARI)= SFARI_cyto$cytoband
 ASD_CNVs = G_SFARI[rawCNVs$Primary.Diagnosis=="Autism" | rawCNVs$Primary.Diagnosis=="ASD" | rawCNVs$Primary.Diagnosis=="Aspergers",]
 cont_CNVs = G_SFARI[rawCNVs$Primary.Diagnosis=="Control" | rawCNVs$Primary.Diagnosis=="Control (matched sibling)" ,]
 
-
-
-
-
 save.image("./Data/CNVcleaning.RData")
 
 
-
-source("http://bioconductor.org/biocLite.R")
-#biocLite("biomaRt")
-library(biomaRt)
-#biocLite("GenomicRanges")
-library("GenomicRanges")
-
-ensembl = useMart("ensembl",dataset="hsapiens_gene_ensembl")
-Gene_locs <- getBM(attributes = c("ensembl_gene_id","chromosome_name","start_position","end_position","strand","band"),
-                   filters = "ensembl_gene_id", values = gene_list$ensembl_gene_id,
-                   mart = ensembl)
