@@ -77,9 +77,9 @@ if (!gsg$allOK)
     if (sum(!gsg$goodSamples)>0)
         printFlush(paste("Removing samples:", paste(rownames(datExpr0)[!gsg$goodSamples], collapse = ", ")))
     datExpr0= datExpr0[gsg$goodSamples, gsg$goodGenes]
-    genelist_data=genelist_data[gsg$goodGenes,]
+    genelist=genelist[gsg$goodGenes,]
 }
-## Removing genes: ENSG00000169100, ENSG00000198840, ENSG00000198695
+
 rm(Bspan_rows,SFARI,scores,Expr,map)
 
 
@@ -215,36 +215,45 @@ geneOrder = order(geneInfo$moduleColor, -abs(geneInfo$GS.Months_Age));
 geneInfo = geneInfo[geneOrder, ]
 write.csv(geneInfo, file = "./Data/geneInfo.csv",row.names = FALSE )
 
-#save.image("./Data/ASD_network.RData")
+save.image("./Data/Post_geneinfo_network.RData")
+
+load(file="./Data/Post_geneinfo_network.RData")
 
 
 ##############################
 library(gplots)
 library(RColorBrewer)
 ###### this code is for modular analysis of ASD genes and lncRNAS
+genelist$ASD_score = as.character(genelist$ASD_score)
+genelist$ASD_score[is.na(genelist$ASD_score)]=0
 
-mod_sum<-matrix(data=NA,nrow=length(table(moduleColors)),ncol=4)
-colnames(mod_sum) <-c("LncRNAs","ASD_all","ASD_high","total")
-rownames(mod_sum) <-as.list(names(table(moduleColors)))
-LncRNAs <-as.list(table(factor(moduleColors[genelist_data$lncRNA==1],lev=rownames(mod_sum))))
-ASD_all <- as.list(table(factor(moduleColors[!is.na(genelist_data$ASD_score)],lev=rownames(mod_sum))))
+mod_sum<-matrix(data=NA,nrow=length(table(moduleColors)),ncol=5)
+colnames(mod_sum) <- c("PC_DE","LncRNAs_DE","ASD_high","ASD_Full","total")
+rownames(mod_sum) <- as.list(names(table(moduleColors)))
 
-genelist_data$ASD_high=0
-genelist_data$ASD_high[ genelist_data$ASD_score=="1" | genelist_data$ASD_score=="1S" | genelist_data$ASD_score=="2" | genelist_data$ASD_score=="2S" | genelist_data$ASD_score=="3" | genelist_data$ASD_score=="3S" | genelist_data$ASD_score=="4" | genelist_data$ASD_score=="4S" ] = 1
-ASD_high <- as.list(table(factor(moduleColors[ genelist_data$ASD_high == 1],lev=rownames(mod_sum))))
+LncRNAs <-as.list(table(factor(moduleColors[genelist$lncRNA== TRUE & genelist$L2FC == 0],lev=rownames(mod_sum))))
+DE_PC = table(factor(moduleColors[genelist$lncRNA== FALSE & genelist$L2FC != 0],lev=rownames(mod_sum)))
+mod_sum[,1] = as.numeric(DE_PC)
+
+LncRNAs_DE = as.list(table(factor(moduleColors[genelist$lncRNA== TRUE & genelist$L2FC != 0],lev=rownames(mod_sum))))
+mod_sum[,2] = as.numeric(LncRNAs_DE)
+
+ASD_high = table(factor(moduleColors[genelist$ASD_score==1 | genelist$ASD_score==2  | genelist$ASD_score==3 | genelist$ASD_score==4 ],lev=rownames(mod_sum)))
+mod_sum[,3] = as.numeric(ASD_high)
+
+#ASD_syndromic = as.list(table(factor(moduleColors[!is.na( genelist$ASD_score[ genelist$ASD_score=="1S" | genelist$ASD_score=="2S" | genelist$ASD_score=="3S" | genelist$ASD_score=="4S" | genelist$ASD_score=="S" ])], lev=rownames(mod_sum))))
+ASD_Full = table(factor(moduleColors[genelist$ASD_score=="1S" | genelist$ASD_score=="2S" | genelist$ASD_score=="3S" | genelist$ASD_score=="4S" | genelist$ASD_score==1 | genelist$ASD_score==2  | genelist$ASD_score==3 | genelist$ASD_score==4 | genelist$ASD_score == 5 ],lev=rownames(mod_sum)))
+mod_sum[,4] = as.numeric(ASD_Full)
 
 mod_totals <- as.list(table(moduleColors))
-
-mod_sum<-cbind(LncRNAs, ASD_all, ASD_high, mod_totals)
-
+mod_sum[,5]= as.numeric(mod_totals)
 
 total_genes = nGenes
-
-mat_p = matrix(data=NA, nrow=nrow(mod_sum), ncol=3)
-mat_or = matrix(data=NA, nrow=nrow(mod_sum), ncol=3)
+mat_p = matrix(data=NA, nrow=nrow(mod_sum), ncol=4)
+mat_or = matrix(data=NA, nrow=nrow(mod_sum), ncol=4)
 for (row in 1:nrow(mod_sum)){
-    for (col in 1:3) {
-        mod_total <- as.numeric(mod_sum[row,4])
+    for (col in 1:4) {
+        mod_total <- as.numeric(mod_sum[row,5])
         mod_count <- as.numeric(mod_sum[row,col])
         mod_non <- mod_total-mod_count
         non_count <- sum(as.numeric(mod_sum[,col])) - mod_count       
@@ -262,8 +271,8 @@ for (row in 1:nrow(mod_sum)){
 
 rownames(mat_p)<-rownames(mod_sum)
 rownames(mat_or)<-rownames(mod_sum)
-colnames(mat_p)<-colnames(mod_sum)[1:3]
-colnames(mat_or)<-colnames(mod_sum)[1:3]
+colnames(mat_p)<-colnames(mod_sum)[1:4]
+colnames(mat_or)<-colnames(mod_sum)[1:4]
 
 ad_p<-c()
 
@@ -280,20 +289,17 @@ col_breaks = c(seq(0,1.2,length=100), # for red
                seq(1.2,2,length=100), # for yellow
                seq(2,6,length=100)) # for green
 
-OR_filter<-matrix(data=NA,ncol=3,nrow=nrow(log_p))
+OR_filter<-matrix(data=NA,ncol=4,nrow=nrow(log_p))
 OR_filter[mat_or >= 1 &log_p >= 1.3]<-round(mat_or[mat_or >= 1 & log_p>= 1.3],2)
 
 rownames(OR_filter)<-rownames(log_p)
 
 pdf("Figures/module_gene-enrichment_ID.pdf")
-par(mar=c(2,2,3,5))
+par(mar=c(5,2,3,5))
 
 heatmap.2(log_p,cellnote=OR_filter,trace="none",main="Risk gene Enrichment",RowSideColors=rownames(log_p),notecol="black",key=TRUE,col=my_palette,symm=F,symkey=F,symbreaks=F,scale="column")
 #heatmap.2(log_p[rowSums(OR_filter[,-c(1,6)],na.rm=TRUE)!=0,-c(1,6)],cellnote=OR_filter[rowSums(OR_filter[,-c(1,6)],na.rm=TRUE)!=0,-c(1,6)],margins=c(8,6),trace="none",main="Risk gene Enrichment",RowSideColors=rownames(log_p[rowSums(OR_filter[,-c(1,6)],na.rm=TRUE)!=0,-c(1,6)]),notecol="black",key=TRUE,col=my_palette,symm=F,symkey=F,symbreaks=F)
 dev.off()
-
-
-
 
 
 
