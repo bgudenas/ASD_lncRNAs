@@ -286,9 +286,9 @@ colnames(ad_p) <-colnames(mat_p)
 log_p<-log10(mat_p)*-1      ### -log10 transformation for figure
 
 my_palette <- colorRampPalette(c("white","orange","red"))(n = 299)
-col_breaks = c(seq(0,1.2,length=100), # for red
-               seq(1.2,2,length=100), # for yellow
-               seq(2,6,length=100)) # for green
+# #col_breaks = c(seq(0,1.2,length=100), # for red
+#                seq(1.2,2,length=100), # for yellow
+#                seq(2,6,length=100)) # for green
 
 OR_filter<-matrix(data=NA,ncol=3,nrow=nrow(log_p))
 OR_filter[mat_or >= 1 &log_p >= 1.3]<-round(mat_or[mat_or >= 1 & log_p>= 1.3],2)
@@ -299,8 +299,9 @@ pdf("./Figures/concise_module_geneset_enrichment.pdf")
 par(mar=c(5,2,3,5))
 
 heatmap.2(log_p,cellnote=OR_filter,trace="none",main="Risk gene Enrichment",RowSideColors=rownames(log_p),notecol="black",key=TRUE,col=my_palette,symm=F,symkey=F,symbreaks=F)
-#heatmap.2(log_p[rowSums(OR_filter[,-c(1,6)],na.rm=TRUE)!=0,-c(1,6)],cellnote=OR_filter[rowSums(OR_filter[,-c(1,6)],na.rm=TRUE)!=0,-c(1,6)],margins=c(8,6),trace="none",main="Risk gene Enrichment",RowSideColors=rownames(log_p[rowSums(OR_filter[,-c(1,6)],na.rm=TRUE)!=0,-c(1,6)]),notecol="black",key=TRUE,col=my_palette,symm=F,symkey=F,symbreaks=F)
+
 dev.off()
+
 
 
 
