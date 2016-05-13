@@ -247,7 +247,6 @@ mod_sum[,3] = as.numeric(ASD_Full)
 mod_totals <- as.list(table(moduleColors))
 mod_sum[,4]= as.numeric(mod_totals)
 
-mod_sum = mod_sum[mod_sum[,1] > 0,] ### this removes all modules without lncRNAs to lower the # of statiscal tests sense we are only testing for alternative = greater
 
 total_genes = nGenes
 mat_p = matrix(data=NA, nrow=nrow(mod_sum), ncol=3)
@@ -274,6 +273,10 @@ rownames(mat_p)<-rownames(mod_sum)
 rownames(mat_or)<-rownames(mod_sum)
 colnames(mat_p)<-colnames(mod_sum)[1:3]
 colnames(mat_or)<-colnames(mod_sum)[1:3]
+
+
+mat_p = mat_p[mod_sum[,1] > 1 ,]
+mat_or = mat_or[mod_sum[,1] > 1 ,]
 
 ad_p<-c()
 
