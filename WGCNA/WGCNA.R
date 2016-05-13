@@ -214,6 +214,8 @@ geneOrder = order(geneInfo$moduleColor, -abs(geneInfo$GS.Months_Age));
 geneInfo = geneInfo[geneOrder, ]
 write.csv(geneInfo, file = "./Data/geneInfo.csv",row.names = FALSE )
 
+genelist$ASD_score = as.character(genelist$ASD_score)
+genelist$ASD_score[is.na(genelist$ASD_score)]=0
 save.image("./Data/Post_geneinfo_network.RData")
 
 load(file="./Data/Post_geneinfo_network.RData")
