@@ -15,7 +15,7 @@ LncRNA_ASD_mat = cor(datExpr0[,DE_lncRNAs], datExpr0[,DE_lncRNAs])
 lncRNA_ASD_pairs=sum(LncRNA_ASD_mat > 0.8)
 
 ### permutation loop
-P=20000 ## iterations
+P=10000 ## iterations
 
 #fExpr = datExpr0[,-c(DE_lncRNAs, ASD_genes) ]  ## eligible genes
 sig_pairs=c()

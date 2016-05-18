@@ -25,6 +25,9 @@ lines(x= df.bar, y = as.numeric(rowMeans(Results)))
 points(x= df.bar, y = as.numeric(rowMeans(Results)), col="red4", pch=16)
 dev.off()
 ### Permutation testing
+
+
+
 Iter = 10000
 
 PermTest = function(Iter, genelist, test_var)
@@ -45,6 +48,38 @@ PermTest = function(Iter, genelist, test_var)
         }
     }
     
-
+### statistical Enrichment?
 Z_scores = scale(c(as.numeric(Results[2,]),Mod_DE$Avg[2]))
+
+
+#Co-expression
+##########################################
+Real_coexp = data.frame(matrix(nrow=length(mod_counts), ncol = 1, data=0))
+rownames(Real_coexp) = names(table(genelist$Module))
+for (mod in names(table(genelist$Module))) {
+
+    colnames(Real_coexp) = "Mean Module Correlation"
+    actual_coexp = mean(cor(datExpr0[,genelist$Module == mod], datExpr0[,genelist$Module == mod]))
+    Real_coexp[rownames(Real_coexp)==mod,1] = actual_coexp
+}
     
+
+
+
+
+Iter = 5
+mod_counts = as.numeric(table(moduleColors))
+Results = matrix(nrow=length(mod_counts), ncol = Iter, data=0)
+rownames(Results) = names(table(moduleColors))
+
+for (I in 1:Iter){
+    avail_genes = 1:nrow(genelist)
+    for (mod in 1:length(mod_counts)) {
+        rand_genes = sample(avail_genes, mod_counts[mod])
+        avail_genes = avail_genes[-rand_genes]   ## remove chosen genes from available
+        
+        rand_sum = mean(cor(datExpr0[,rand_genes], datExpr0[,rand_genes]))
+        Results[mod,I] = rand_sum 
+    }
+}
+#11:42    
