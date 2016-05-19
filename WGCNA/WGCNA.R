@@ -1,6 +1,7 @@
 #5/3/16
 #### load WGCNA v1.46
 library(WGCNA)
+
 options(stringsAsFactors=FALSE)
 enableWGCNAThreads()
 
@@ -310,25 +311,27 @@ dev.off()
 
 
 
-###9/9 CNV detection
-setwd("ASD")
-load(file="./Data/CNVcleaning.RData")
-rm(GSPvalue,OR_filter,OR,ad_p,cont_CNVs,geneModuleMembership,mod_sum,mod_count,mod_totals,textMatrix,ensembl_hg36,col_breaks,p_val,sft,powers,my_palette,MMPvalue,gene_matches,mat_p,mat_or,geneTraitSignificance,gsg,mod,gene,net,results,geneTree,mod_non)
 
-rawCNVs <-read.csv("Raw/SFARI/individual-data.csv") ##7/24
-SFARI_cyto <- read.csv("CNV/SFARI_converted_hg38.csv") ###cytoband converted to hg38 coordinates using cyto_converter.R
-rawCNVs=rawCNVs[complete.cases(SFARI_cyto),]
-SFARI_cyto=SFARI_cyto[complete.cases(SFARI_cyto),]
-
-SFARI_cyto$chromosome =paste("chr",SFARI_cyto$chromosome,sep="")
-
-library(GenomicRanges)
-G_SFARI=makeGRangesFromDataFrame(SFARI_cyto[,2:4])
-names(G_SFARI)= SFARI_cyto$cytoband
-
-ASD_CNVs = G_SFARI[rawCNVs$Primary.Diagnosis=="Autism" | rawCNVs$Primary.Diagnosis=="ASD" | rawCNVs$Primary.Diagnosis=="Aspergers",]
-cont_CNVs = G_SFARI[rawCNVs$Primary.Diagnosis=="Control" | rawCNVs$Primary.Diagnosis=="Control (matched sibling)" ,]
-
-save.image("./Data/CNVcleaning.RData")
-
+# 
+# ###9/9 CNV detection
+# setwd("ASD")
+# load(file="./Data/CNVcleaning.RData")
+# rm(GSPvalue,OR_filter,OR,ad_p,cont_CNVs,geneModuleMembership,mod_sum,mod_count,mod_totals,textMatrix,ensembl_hg36,col_breaks,p_val,sft,powers,my_palette,MMPvalue,gene_matches,mat_p,mat_or,geneTraitSignificance,gsg,mod,gene,net,results,geneTree,mod_non)
+# 
+# rawCNVs <-read.csv("Raw/SFARI/individual-data.csv") ##7/24
+# SFARI_cyto <- read.csv("CNV/SFARI_converted_hg38.csv") ###cytoband converted to hg38 coordinates using cyto_converter.R
+# rawCNVs=rawCNVs[complete.cases(SFARI_cyto),]
+# SFARI_cyto=SFARI_cyto[complete.cases(SFARI_cyto),]
+# 
+# SFARI_cyto$chromosome =paste("chr",SFARI_cyto$chromosome,sep="")
+# 
+# library(GenomicRanges)
+# G_SFARI=makeGRangesFromDataFrame(SFARI_cyto[,2:4])
+# names(G_SFARI)= SFARI_cyto$cytoband
+# 
+# ASD_CNVs = G_SFARI[rawCNVs$Primary.Diagnosis=="Autism" | rawCNVs$Primary.Diagnosis=="ASD" | rawCNVs$Primary.Diagnosis=="Aspergers",]
+# cont_CNVs = G_SFARI[rawCNVs$Primary.Diagnosis=="Control" | rawCNVs$Primary.Diagnosis=="Control (matched sibling)" ,]
+# 
+# save.image("./Data/CNVcleaning.RData")
+# 
 
