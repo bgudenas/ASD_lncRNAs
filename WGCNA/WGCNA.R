@@ -222,9 +222,30 @@ save.image("./Data/Post_geneinfo_network.RData")
 load(file="./Data/Post_geneinfo_network.RData")
 
 
+## Exploratory GO enrichment; TRUE Enrichment performed using DAVID
+GOenr = GOenrichmentAnalysis(moduleColors, genelist$entrez_id, organism = "human", nBestP = 10);
+tab = GOenr$bestPTerms[[4]]$enrichment
+write.table(tab, file = "./Data/GOEnrichmentTable.csv", sep = ",", quote = TRUE, row.names = FALSE)
+
+
 ##############################
 library(gplots)
 library(RColorBrewer)
+my_palette <- colorRampPalette(c("dark green","green","white","white","red","dark red"))(n = 599)
+
+
+Module_dist = cor(MEs0,MEs0)
+Modules0= paste(paste0(toupper(substr(names(table(moduleColors)), 1, 1)), tolower(substring(names(table(moduleColors)), 2))))
+rownames(Module_dist) = Modules0
+colnames(Module_dist) = Modules0
+
+pdf("./Figures/ModuleCor_heatmap.pdf")
+heatmap.2(Module_dist,trace="none",main="Module Correlation Matrix",RowSideColors=names(table(moduleColors)),notecol="black",key=TRUE,col=my_palette,symm=F,symkey=F,symbreaks=F)
+dev.off()
+
+
+
+
 ###### this code is for modular analysis of ASD genes and lncRNAS
 genelist$ASD_score = as.character(genelist$ASD_score)
 genelist$ASD_score[is.na(genelist$ASD_score)]=0
@@ -291,10 +312,7 @@ colnames(ad_p) <-colnames(mat_p)
 
 log_p<-log10(mat_p)*-1      ### -log10 transformation for figure
 
-my_palette <- colorRampPalette(c("white","orange","red"))(n = 299)
-# #col_breaks = c(seq(0,1.2,length=100), # for red
-#                seq(1.2,2,length=100), # for yellow
-#                seq(2,6,length=100)) # for green
+
 
 OR_filter<-matrix(data=NA,ncol=3,nrow=nrow(log_p))
 OR_filter[mat_or >= 1 &log_p >= 1.3]<-round(mat_or[mat_or >= 1 & log_p>= 1.3],2)
@@ -303,6 +321,7 @@ rownames(OR_filter)<-rownames(log_p)
 
 pdf("./Figures/concise_module_geneset_enrichment.pdf")
 par(mar=c(5,2,3,5))
+my_palette <- colorRampPalette(c("white","orange","red"))(n = 299)
 
 heatmap.2(log_p,cellnote=OR_filter,trace="none",main="Risk gene Enrichment",RowSideColors=rownames(log_p),notecol="black",key=TRUE,col=my_palette,symm=F,symkey=F,symbreaks=F)
 
