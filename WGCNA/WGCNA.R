@@ -227,6 +227,25 @@ GOenr = GOenrichmentAnalysis(moduleColors, genelist$entrez_id, organism = "human
 tab = GOenr$bestPTerms[[4]]$enrichment
 write.table(tab, file = "./Data/GOEnrichmentTable.csv", sep = ",", quote = TRUE, row.names = FALSE)
 
+dir.create("Modules")
+setwd("Modules")
+
+Modules = names(table(moduleColors))
+
+write(as.character(genelist$ensembl_gene_id), "Background.txt", sep=" ")
+
+for (m in Modules){
+    dir.create(m, showWarnings = FALSE)
+    setwd(m)
+    gene_names = genelist$ensembl_gene_id[moduleColors==m]
+    print(paste(m, length(gene_names)))
+    write(as.character(gene_names), paste0(m,".txt"))
+    setwd("..")
+}
+
+
+
+
 
 ##############################
 library(gplots)
