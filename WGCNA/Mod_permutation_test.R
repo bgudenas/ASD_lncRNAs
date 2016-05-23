@@ -67,19 +67,31 @@ for (mod in names(table(genelist$Module))) {
 
 
 
-Iter = 5
+cor_mat=cor(datExpr0,datExpr0)
+rm(GSPvalue, datExpr0, geneModuleMembership, geneTraitSignificance, net, lnc_test, geneTree, MMPvalue, MEs, MEs0)
+
+
+permTest = function() {
+Iter = 1000
 mod_counts = as.numeric(table(moduleColors))
 Results = matrix(nrow=length(mod_counts), ncol = Iter, data=0)
 rownames(Results) = names(table(moduleColors))
 
 for (I in 1:Iter){
-    avail_genes = 1:nrow(genelist)
+    avail_genes = 1:length(moduleColors)
     for (mod in 1:length(mod_counts)) {
         rand_genes = sample(avail_genes, mod_counts[mod])
         avail_genes = avail_genes[-rand_genes]   ## remove chosen genes from available
         
-        rand_sum = mean(cor(datExpr0[,rand_genes], datExpr0[,rand_genes]))
+        rand_sum = .Internal(mean(cor_mat[rand_genes,rand_genes]))
+        #rand_sum = mean(cor(datExpr0[,rand_genes], datExpr0[,rand_genes]))
         Results[mod,I] = rand_sum 
     }
 }
-#11:42    
+#return(Results)
+#}
+#system.time(permTest())
+#1:24 @ 5k    
+
+rm(cor_mat)
+save.image("./Data/CoEXP_perm_results.RData")
