@@ -31,6 +31,7 @@ for (mod in lnc_mods){
     GO = GO[grepl("GOTERM_BP_FAT",GO$Category) | grepl("GOTERM_CC_FAT",GO$Category) | grepl("GOTERM_MF_FAT",GO$Category), ]
     GO=GO[,-6]
     GO_keep = GO[1:10,c(1,2,12)]
+    GO_keep=GO_keep[GO_keep$FDR <= 0.05,]
     GO_keep$FDR = -log(GO_keep$FDR)
     
     GO_keep$Term = as.character(GO_keep$Term)
@@ -42,6 +43,7 @@ for (mod in lnc_mods){
     GO_keep$color = "blue"
     GO_keep$color[grepl("GOTERM_CC_FAT",GO_keep$Category)] = "red"
     GO_keep$color[grepl("GOTERM_MF_FAT",GO_keep$Category)] = "green"
+
     
     pdf(paste0(mod,"GO_terms.pdf"))
     par(mar = c(5, 14, 2, 2));
