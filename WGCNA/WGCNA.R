@@ -263,16 +263,19 @@ heatmap.2(Module_dist,trace="none",main="Module Correlation Matrix",RowSideColor
 dev.off()
 
 
-
-
 ###### this code is for modular analysis of ASD genes and lncRNAS
 genelist$ASD_score = as.character(genelist$ASD_score)
 genelist$ASD_score[is.na(genelist$ASD_score)]=0
 
 mod_sum<-matrix(data=NA,nrow=length(table(moduleColors)),ncol=4)
-colnames(mod_sum) <- c("LncRNAs_DE","ASD_high","ASD_Full","total")
-rownames(mod_sum) <- as.list(names(table(moduleColors)))
+colnames(mod_sum) <- c("DE lncRNAs","SFARI","ME16","total")
+rownames(mod_sum) <- names(table(moduleColors))
 
+ME16 = read.csv("./RAW/parikshak_m16.csv")
+ME16 = ME16$ENSEMBL.GENE.ID
+ME16_match = match(genelist$ensembl_gene_id, ME16)
+genelist$ME16=0
+genelist$ME16[!is.na(ME16_match)]=1
 # LncRNAs <-as.list(table(factor(moduleColors[genelist$lncRNA== TRUE & genelist$L2FC == 0],lev=rownames(mod_sum))))
 # DE_PC = table(factor(moduleColors[genelist$lncRNA== FALSE & genelist$L2FC != 0],lev=rownames(mod_sum)))
 # mod_sum[,1] = as.numeric(DE_PC)
@@ -280,12 +283,13 @@ rownames(mod_sum) <- as.list(names(table(moduleColors)))
 LncRNAs_DE = as.list(table(factor(moduleColors[genelist$lncRNA== TRUE & genelist$L2FC != 0],lev=rownames(mod_sum))))
 mod_sum[,1] = as.numeric(LncRNAs_DE)
 
-ASD_high = table(factor(moduleColors[genelist$ASD_score==1 | genelist$ASD_score==2  | genelist$ASD_score==3 | genelist$ASD_score==4 ],lev=rownames(mod_sum)))
-mod_sum[,2] = as.numeric(ASD_high)
+
+SFARI = table(factor(moduleColors[genelist$ASD_score=="1S" | genelist$ASD_score=="2S" | genelist$ASD_score=="3S" | genelist$ASD_score=="4S" | genelist$ASD_score==1 | genelist$ASD_score==2  | genelist$ASD_score==3 | genelist$ASD_score==4 | genelist$ASD_score==5],lev=rownames(mod_sum)))
+mod_sum[,2] = as.numeric(SFARI)
 
 #ASD_syndromic = as.list(table(factor(moduleColors[!is.na( genelist$ASD_score[ genelist$ASD_score=="1S" | genelist$ASD_score=="2S" | genelist$ASD_score=="3S" | genelist$ASD_score=="4S" | genelist$ASD_score=="S" ])], lev=rownames(mod_sum))))
-ASD_Full = table(factor(moduleColors[genelist$ASD_score=="1S" | genelist$ASD_score=="2S" | genelist$ASD_score=="3S" | genelist$ASD_score=="4S" | genelist$ASD_score==1 | genelist$ASD_score==2  | genelist$ASD_score==3 | genelist$ASD_score==4 | genelist$ASD_score == 5 ],lev=rownames(mod_sum)))
-mod_sum[,3] = as.numeric(ASD_Full)
+ME16 = table(factor(moduleColors[genelist$ME16==1],lev=rownames(mod_sum)))
+mod_sum[,3] = as.numeric(ME16)
 
 mod_totals <- as.list(table(moduleColors))
 mod_sum[,4]= as.numeric(mod_totals)
@@ -318,31 +322,35 @@ colnames(mat_p)<-colnames(mod_sum)[1:3]
 colnames(mat_or)<-colnames(mod_sum)[1:3]
 
 
-mat_p = mat_p[mod_sum[,1] > 1 ,]
-mat_or = mat_or[mod_sum[,1] > 1 ,]
+mat_p = mat_p[mod_sum[,1] > 2 ,]
+mat_or = mat_or[mod_sum[,1] > 2 ,]
 
 ad_p<-c()
 
 ### now correct P-values for each test using FDR method
 for (i in 1:ncol(mat_p)){
-    ad_p<-cbind(ad_p,p.adjust(mat_p[,i],"fdr"))
+    ad_p<-cbind(ad_p,p.adjust(mat_p[,i],"holm"))
 }
 colnames(ad_p) <-colnames(mat_p)
 
-log_p<-log10(mat_p)*-1      ### -log10 transformation for figure
+ad_p[ad_p < 10E-20] = 10E-20  ### adjust maximum bound of P-values to avoid saturation issues in heatmap
 
-
+log_p<-log10(ad_p)*-1      ### -log10 transformation for figure
 
 OR_filter<-matrix(data=NA,ncol=3,nrow=nrow(log_p))
-OR_filter[mat_or >= 1 &log_p >= 1.3]<-round(mat_or[mat_or >= 1 & log_p>= 1.3],2)
+### * = p-value < 0.05 || ** = FDR-adjusted p-value < 0.05 ##### both need OR >= 1
+OR_filter[mat_or >= 1 & mat_p <= 0.05] <- paste0(round(mat_or[mat_or >= 1 & mat_p <= 0.05 ],2),"*")
+OR_filter[mat_or >= 1 & ad_p <= 0.05] <- paste0(round(mat_or[mat_or >= 1 & ad_p <= 0.05 ],2),"**")
+
 
 rownames(OR_filter)<-rownames(log_p)
 
-pdf("./Figures/concise_module_geneset_enrichment.pdf")
-par(mar=c(5,2,3,5))
-my_palette <- colorRampPalette(c("white","orange","red"))(n = 299)
+pdf("./Figures/module_geneset_enrichment.pdf")
 
-heatmap.2(log_p,cellnote=OR_filter,trace="none",main="Risk gene Enrichment",RowSideColors=rownames(log_p),notecol="black",key=TRUE,col=my_palette,symm=F,symkey=F,symbreaks=F)
+my_palette <- colorRampPalette(c("white","orange","red"))(n = 399)
+ Modules_cap = paste0(toupper(substr(rownames(log_p), 1, 1)), tolower(substring(rownames(log_p), 2)))
+rownames(log_p) = Modules_cap
+heatmap.2(log_p, cellnote=OR_filter, trace="none", main="ASD Gene Set Enrichment by Module", RowSideColors=Modules_cap, notecol="black",key=TRUE, col=my_palette, symm=F, symkey=F, symbreaks=F, key.xlab="-Log( FDR adjusted p-value )", notecex =2, margins =c(13,8))
 
 dev.off()
 
