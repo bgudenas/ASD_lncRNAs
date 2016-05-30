@@ -355,29 +355,105 @@ heatmap.2(log_p, cellnote=OR_filter, trace="none", main="ASD Gene Set Enrichment
 dev.off()
 
 
+load(file="./Data/Post_geneinfo_network.RData")
+genelist$Module = moduleColors
+
+
+lncRNAlist = genelist[genelist$lncRNA & genelist$L2FC !=0,]
+ASD_lncRNAs = lncRNAlist[lncRNAlist$Module=="blue" | lncRNAlist$Module=="midnightblue" | lncRNAlist$Module=="green" | lncRNAlist$Module=="brown", ]
+ASD_lncRNAs = ASD_lncRNAs[order(abs(ASD_lncRNAs$L2FC), decreasing = TRUE),]
+
+
+ASD_lncMatch = match( ASD_lncRNAs$ensembl_gene_id , colnames(datExpr0))
+ASD_genes = genelist$ASD_score != 0 & genelist$ASD_score != "S" & genelist$ASD_score != "6" & genelist$ASD_score != "5"
+
+LncRNA_ASD_mat = bicor(datExpr0[,ASD_lncMatch], datExpr0[,ASD_genes], use="p", maxPOutliers = 0.1)
+
+lncRNA_ASD_pairs=sum(abs(LncRNA_ASD_mat))
+
+
+library(WGCNA)
+
+P=10000 ## iterations
+sig_pairs=c()
+lnc_num = nrow(LncRNA_ASD_mat)
+for (iter in 1:P){
+    chosen = sample(1:ncol(datExpr0), lnc_num, replace = FALSE)
+    chosen_ASD_mat = bicor( datExpr0[,chosen], datExpr0[,ASD_genes], use="p", maxPOutliers = 0.1)
+    sig_pairs=c(sig_pairs, sum(abs(chosen_ASD_mat)))
+}
 
 
 
-# 
-# ###9/9 CNV detection
-# setwd("ASD")
-# load(file="./Data/CNVcleaning.RData")
-# rm(GSPvalue,OR_filter,OR,ad_p,cont_CNVs,geneModuleMembership,mod_sum,mod_count,mod_totals,textMatrix,ensembl_hg36,col_breaks,p_val,sft,powers,my_palette,MMPvalue,gene_matches,mat_p,mat_or,geneTraitSignificance,gsg,mod,gene,net,results,geneTree,mod_non)
-# 
-# rawCNVs <-read.csv("Raw/SFARI/individual-data.csv") ##7/24
-# SFARI_cyto <- read.csv("CNV/SFARI_converted_hg38.csv") ###cytoband converted to hg38 coordinates using cyto_converter.R
-# rawCNVs=rawCNVs[complete.cases(SFARI_cyto),]
-# SFARI_cyto=SFARI_cyto[complete.cases(SFARI_cyto),]
-# 
-# SFARI_cyto$chromosome =paste("chr",SFARI_cyto$chromosome,sep="")
-# 
-# library(GenomicRanges)
-# G_SFARI=makeGRangesFromDataFrame(SFARI_cyto[,2:4])
-# names(G_SFARI)= SFARI_cyto$cytoband
-# 
-# ASD_CNVs = G_SFARI[rawCNVs$Primary.Diagnosis=="Autism" | rawCNVs$Primary.Diagnosis=="ASD" | rawCNVs$Primary.Diagnosis=="Aspergers",]
-# cont_CNVs = G_SFARI[rawCNVs$Primary.Diagnosis=="Control" | rawCNVs$Primary.Diagnosis=="Control (matched sibling)" ,]
-# 
-# save.image("./Data/CNVcleaning.RData")
-# 
+Z_scores = scale(c(sig_pairs,lncRNA_ASD_pairs)) ## calculate Z_scores of randomized distribution with actual value on end
+Lnc_score = Z_scores[length(Z_scores)] ## Z_score of Actual lncRNA ASD pairs
+pnorm(-abs(Lnc_score))
 
+pdf("./Figures/LncRNA_coexpression_ASD-risk-genes.pdf")
+hist(sig_pairs, xlim=range(8000,12000), xlab = "Summed Correlation", main = "LncRNAs co-expression to random gene-sets compared to ASD risk genes")
+abline(v=lncRNA_ASD_pairs, lwd = 2, col = "red")
+text(lncRNA_ASD_pairs-550,2100, "p-value < .0001 ", srt = 0.1, pos = 1, cex=1.2)
+dev.off()
+
+####################
+#Perform same permutation test for ME16 genes
+ME16 = read.csv("./RAW/parikshak_m16.csv")
+ME16 = ME16$ENSEMBL.GENE.ID
+ME16_match = match(genelist$ensembl_gene_id, ME16)
+genelist$ME16=0
+genelist$ME16[!is.na(ME16_match)]=1
+
+ME16_genes = genelist$ME16==1
+
+LncRNA_ASD_mat = bicor(datExpr0[,ASD_lncMatch], datExpr0[, ME16_genes], use="p", maxPOutliers = 0.1)
+
+lncRNA_ASD_pairs=sum(abs(LncRNA_ASD_mat))
+
+
+library(WGCNA)
+
+P=10000 ## iterations
+sig_pairs=c()
+lnc_num = nrow(LncRNA_ASD_mat)
+for (iter in 1:P){
+    chosen = sample(1:ncol(datExpr0), lnc_num, replace = FALSE)
+    chosen_ASD_mat = bicor( datExpr0[,chosen], datExpr0[,ME16_genes], use="p", maxPOutliers = 0.1)
+    sig_pairs=c(sig_pairs, sum(abs(chosen_ASD_mat)))
+}
+
+
+
+Z_scores = scale(c(sig_pairs,lncRNA_ASD_pairs)) ## calculate Z_scores of randomized distribution with actual value on end
+Lnc_score = Z_scores[length(Z_scores)] ## Z_score of Actual lncRNA ASD pairs
+pval = pnorm(-abs(Lnc_score))
+
+pdf("./Figures/LncRNA_coexpression_ME16-risk-genes.pdf")
+hist(sig_pairs, xlim = range(11000, 15000), xlab = "Summed Correlation", main = "LncRNAs co-expression to random gene-sets compared to ME16 genes")
+abline(v= lncRNA_ASD_pairs, lwd = 2, col = "red")
+text(lncRNA_ASD_pairs-550,1700, "p-value < .0001", srt = 0.1, pos = 1, cex=1.2)
+dev.off()
+
+
+DEG_match = match(rownames(DEG), genelist$ensembl_gene_id[ASD_genes])
+DE_ASD = table(is.na(DEG_match))[1]
+NotDE_ASD = length(genelist$ensembl_gene_id[ASD_genes]) - DE_ASD
+DE_nonASD = nrow(DEG)-length(genelist$ensembl_gene_id[ASD_genes])
+NotDE_nonASD = nrow(genelist) - nrow(DEG)
+
+contingency = matrix(nrow=2,ncol=2, data = c(DE_ASD, DE_nonASD, NotDE_ASD, NotDE_nonASD))
+rownames(contingency) = c("ASD","non-ASD")
+colnames(contingency) = c("DE", "Not DE")
+contingency
+#         DE Not DE
+# ASD       54    267
+# non-ASD 1664  21035
+fisher.test(contingency)
+# Fisher's Exact Test for Count Data
+# 
+# data:  contingency
+# p-value = 1.942e-08
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+# 1.863647 3.452190
+# sample estimates:
+# odds ratio 
