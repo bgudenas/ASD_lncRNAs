@@ -18,11 +18,12 @@ map = getBM(mart = mart, attributes = c("ensembl_gene_id","entrezgene","gene_bio
 
 dds=DESeqDataSetFromMatrix(countData = counts ,colData = condition, design = ~ condition)
 dds_DE =DESeq(dds)
-res05 =results(dds_DE, alpha = 0.05)
+res05 =results(dds_DE, alpha = 0.05, contrast = c("condition","ASD","CON"))
 # sum(res05$padj < 0.05, na.rm=TRUE)
 # [1] 1985
 
 plotMA(res05, main="DESeq2")
+
 
 
 res05 = res05[!is.na(res05$padj),]   ### remove genes with NA as p-adjusted
@@ -49,6 +50,7 @@ res_sig$end_pos = map$end_position[sig_match]
 res_sig$entrez = map$entrezgene[sig_match]
 
 resOrdered <- res_sig[order(res_sig$padj),]
+
 
 ##----- write out significant DEG
 write.csv(resOrdered,"DEG_Results_alpha05.csv")
