@@ -8,7 +8,6 @@ enableWGCNAThreads()
 workdir = "C:/Users/Brian/Documents/RNAseq/Autism/WGCNA/"
 setwd(workdir)
 
-
 Bspan_rows<-read.csv("./RAW/Brainspan/rows_metadata.csv")  ##genelist of Brainspan transcriptome summarized to genes,5/15
 DEG <-read.csv("C:/Users/Brian/Documents/RNAseq/Autism/SRP007483_Voineagu/DESeq2/DEG_Results_alpha05.csv",row.names = 1) ## ASD Differentially expression 
 
