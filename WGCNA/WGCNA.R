@@ -1,5 +1,6 @@
 #5/3/16
 #### load WGCNA v1.46
+
 library(WGCNA)
 
 options(stringsAsFactors=FALSE)
@@ -456,3 +457,31 @@ fisher.test(contingency)
 # 1.863647 3.452190
 # sample estimates:
 # odds ratio 
+
+
+
+workdir = "C:/Users/Brian/Documents/RNAseq/Autism/WGCNA/"
+setwd(workdir)
+
+load(file="./Data/Post_geneinfo_network.RData")
+GTEx = read.csv("C:/Users/Brian/Documents/RNAseq/GTEx/GTEx_Analysis_v6_RNA-seq_RNA-SeQCv1.1.8_gene_median_rpkm.csv")
+
+match_GTEx = match(GTEx$Gene.Name, genelist$gene_symbol)
+GTEx$module = genelist$Module[match_GTEx]
+
+library(dplyr)
+library(ggplot2)
+sub_GTEx = GTEx %>%
+    filter(!is.na(module)) %>%
+    group_by(module) %>%
+    summarise(
+        means = mean(Brain...Cortex)
+    ) %>%
+    
+    ggplot(data = sub_GTEx, aes(module, means), color = module)+
+    geom_bar( width=1, stat = "identity", aes(fill=module)) +
+    scale_fill_identity()
+    
+    
+    
+
