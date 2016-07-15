@@ -464,10 +464,17 @@ workdir = "C:/Users/Brian/Documents/RNAseq/Autism/WGCNA/"
 setwd(workdir)
 
 load(file="./Data/Post_geneinfo_network.RData")
+rm(datExpr0, MMPvalue, geneTraitSignificance, net)
 GTEx = read.csv("C:/Users/Brian/Documents/RNAseq/GTEx/GTEx_Analysis_v6_RNA-seq_RNA-SeQCv1.1.8_gene_median_rpkm.csv")
 
 match_GTEx = match(GTEx$Gene.Name, genelist$gene_symbol)
 GTEx$module = genelist$Module[match_GTEx]
+GTEx$lncRNA = genelist$lncRNA[match_GTEx]
+GTEx$L2FC = genelist$L2FC[match_GTEx]
+
+## remove genes not in network
+GTEx = GTEx[!is.na(GTEx$module), ]
+
 
 library(dplyr)
 library(ggplot2)
@@ -476,12 +483,26 @@ sub_GTEx = GTEx %>%
     group_by(module) %>%
     summarise(
         means = mean(Brain...Cortex)
-    ) %>%
+    ) 
     
-    ggplot(data = sub_GTEx, aes(module, means), color = module)+
-    geom_bar( width=1, stat = "identity", aes(fill=module)) +
-    scale_fill_identity()
+#     ggplot(data = sub_GTEx, aes(module, means), color = module)+
+#     geom_bar( width=1, stat = "identity", aes(fill=module)) +
+#     scale_fill_identity()
+my_palette <- colorRampPalette(c("green","white","orange","red"))(n = 599)
+library(dplyr)
+
+exprMat = data.matrix(GTEx[, -c(1,2,56,57,58)])
+rownames(exprMat) = exprGTEx$Gene.Name
+
+#LncRNAs = filter(GTEx, )
+
+library(gplots)
+library(RColorBrewer)
+DE_lncrns = scale(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ])
+
+pdf("DE_lncRNAs_heatmap.pdf")
+heatmap.2(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ] , trace="none", main="Gene Expr by tissue", notecol="black",key=TRUE, col=my_palette, symm=F, symkey=F, symbreaks=F, key.xlab="Median FPKM", scale ="row")
+dev.off()
     
-    
-    
+quantile(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ])
 
