@@ -457,7 +457,24 @@ fisher.test(contingency)
 # 1.863647 3.452190
 # sample estimates:
 # odds ratio 
+load(file="./Data/Post_geneinfo_network.RData")
 
+moduleMembership = vector(mode = "numeric", length = nrow(geneInfo))
+for (i in 1:nrow(geneInfo)){
+    module = paste0("MM.",geneInfo$moduleColor[i])
+    moduleMembership[i] = select(geneInfo,  match(module, colnames(geneInfo)))[i,]
+}
+geneInfo$Membership = moduleMembership
+
+genelist$membership =geneInfo$Membership[match(genelist$ensembl_gene_id, geneInfo$Ensembl_ID)]
+    
+library(ggplot2)
+
+group_by(genelist[genelist$lncRNA,], Module) %>%
+    summarise(avg =mean(membership)) %>%
+    ggplot(mapping = aes(y=avg, x = Module))+
+    geom_bar( aes(fill=Module), stat = "identity", width = 1)+
+    scale_fill_identity()
 
 
 workdir = "C:/Users/Brian/Documents/RNAseq/Autism/WGCNA/"
