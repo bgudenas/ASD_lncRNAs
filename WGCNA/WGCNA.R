@@ -458,7 +458,7 @@ fisher.test(contingency)
 # sample estimates:
 # odds ratio 
 load(file="./Data/Post_geneinfo_network.RData")
-
+library(dplyr)
 moduleMembership = vector(mode = "numeric", length = nrow(geneInfo))
 for (i in 1:nrow(geneInfo)){
     module = paste0("MM.",geneInfo$moduleColor[i])
@@ -470,11 +470,17 @@ genelist$membership =geneInfo$Membership[match(genelist$ensembl_gene_id, geneInf
     
 library(ggplot2)
 
-group_by(genelist[genelist$lncRNA,], Module) %>%
-    summarise(avg =mean(membership)) %>%
-    ggplot(mapping = aes(y=avg, x = Module))+
-    geom_bar( aes(fill=Module), stat = "identity", width = 1)+
-    scale_fill_identity()
+group_by(genelist[genelist$lncRNA & genelist$L2FC !=0,], Module) %>%
+    #summarise(avg =mean(membership)) %>%
+     ggplot(mapping = aes(y=membership, x = Module))+
+#     geom_bar( aes(fill=Module), stat = "identity", width = 1)+
+#     scale_fill_identity()
+    geom_boxplot()
+
+
+# 
+# DE_lncRNAs = genelist[genelist$lncRNA & genelist$L2FC !=0,]
+# DE_lncRNAs[order(DE_lncrnas$membership, decreasing = TRUE),]
 
 
 workdir = "C:/Users/Brian/Documents/RNAseq/Autism/WGCNA/"
@@ -501,24 +507,24 @@ sub_GTEx = GTEx %>%
     summarise(
         means = mean(Brain...Cortex)
     ) 
-    
 #     ggplot(data = sub_GTEx, aes(module, means), color = module)+
 #     geom_bar( width=1, stat = "identity", aes(fill=module)) +
 #     scale_fill_identity()
-my_palette <- colorRampPalette(c("green","white","orange","red"))(n = 599)
-library(dplyr)
+
+my_palette <- colorRampPalette(c("grey","white","orange","orangered","darkred","black"))(n = 599)
+
 
 exprMat = data.matrix(GTEx[, -c(1,2,56,57,58)])
-rownames(exprMat) = exprGTEx$Gene.Name
+rownames(exprMat) = GTEx$Gene.Name
 
 #LncRNAs = filter(GTEx, )
 
 library(gplots)
 library(RColorBrewer)
-DE_lncrns = scale(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ])
+#DE_lncrns = scale(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ])
 
-pdf("DE_lncRNAs_heatmap.pdf")
-heatmap.2(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ] , trace="none", main="Gene Expr by tissue", notecol="black",key=TRUE, col=my_palette, symm=F, symkey=F, symbreaks=F, key.xlab="Median FPKM", scale ="row")
+pdf("./Figures/DE_lncRNAs_heatmap.pdf", width = 16, height = 12)
+heatmap.2(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ] , trace="none", main="LncRNA Expression by Tissue-Type", notecol="black",key=TRUE, col=my_palette, symm=F, symkey=F, symbreaks=F, key.xlab="Scaled Median FPKM", scale ="row", margins = c(10,6))
 dev.off()
     
 quantile(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ])
