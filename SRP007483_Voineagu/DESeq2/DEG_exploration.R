@@ -20,31 +20,51 @@ par(mar = c(12, 4, 4, 2));
 barplot(lnc_types, las=2, main = "Biotype of (293) LncRNAs Differentially Expressed in ASD")
 dev.off()
 
+library(dplyr)
 
 lnc_xp = group_by(DEG[lncRNAs,], DEG$biotype[lncRNAs])
 lnc_types = lnc_types[lnc_types != 0]
 
 summarise(lnc_xp, mean(log2FoldChange))
-
-summarise(lnc_xp, mean(log2FoldChange))
 # Source: local data frame [6 x 2]
 
+# Source: local data frame [6 x 2]
+# 
 # DEG$biotype[lncRNAs] mean(log2FoldChange)
 # (fctr)                (dbl)
-# 1 3prime_overlapping_ncrna            1.7473859
-# 2                antisense           -0.3338986
-# 3                  lincRNA           -0.2710390
-# 4     processed_transcript           -0.2203220
-# 5           sense_intronic           -0.5102447
-# 6        sense_overlapping            0.5342363
+# 1 3prime_overlapping_ncrna           -1.7473859
+# 2                antisense            0.3338986
+# 3                  lincRNA            0.2710390
+# 4     processed_transcript            0.2203220
+# 5           sense_intronic            0.5102447
+# 6        sense_overlapping           -0.5342363
 
 # quantile(lnc_xp$log2FoldChange)
 # 0%       25%       50%       75%      100% 
-# -3.308318 -1.689759 -1.305628  1.533424  3.155564 
+# -3.155564 -1.533424  1.305628  1.689759  3.308318 
 
-# table(lnc_xp$log2FoldChange < 0)
+# table(lnc_xp$log2FoldChange > 0)
 # FALSE  TRUE 
 # 124   169 
+
+PC = DEG[!DEG$lncRNA, ]
+PC = group_by(PC, biotype)
+summarise(PC, mean(log2FoldChange))
+
+quantile(PC$log2FoldChange)
+
+
+wilcox.test(x=lnc_xp$log2FoldChange, y = PC$log2FoldChange, paired = FALSE)
+
+# Wilcoxon rank sum test with continuity correction
+# 
+# data:  lnc_xp$log2FoldChange and PC$log2FoldChange
+# W = 268240, p-value = 0.02457
+# alternative hypothesis: true location shift is not equal to 0
+
+
+
+
 
 # 169/ (169+124)
 # [1] 0.5767918 % down-regulated
