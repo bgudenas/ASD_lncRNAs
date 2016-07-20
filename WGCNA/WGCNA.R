@@ -488,7 +488,14 @@ setwd(workdir)
 
 load(file="./Data/Post_geneinfo_network.RData")
 rm(datExpr0, MMPvalue, geneTraitSignificance, net)
+
+#GTEx from 'http://www.gtexportal.org/static/datasets/gtex_analysis_v6/rna_seq_data/GTEx_Analysis_v6_RNA-seq_RNA-SeQCv1.1.8_gene_median_rpkm.gct.gz'
 GTEx = read.csv("C:/Users/Brian/Documents/RNAseq/GTEx/GTEx_Analysis_v6_RNA-seq_RNA-SeQCv1.1.8_gene_median_rpkm.csv")
+# GTEx_samples from http://www.gtexportal.org/home/tissueSummaryPage
+GTEx_samples = read.csv("C:/Users/Brian/Documents/RNAseq/GTEx/GTEx_sample_metadata.csv")
+GTEx_samples = GTEx_samples[order(GTEx_samples$Tissue), ]  ## reorder samples to match GTEx columns (alphabetical)
+
+
 
 match_GTEx = match(GTEx$Gene.Name, genelist$gene_symbol)
 GTEx$module = genelist$Module[match_GTEx]
@@ -498,18 +505,18 @@ GTEx$L2FC = genelist$L2FC[match_GTEx]
 ## remove genes not in network
 GTEx = GTEx[!is.na(GTEx$module), ]
 
-
-library(dplyr)
-library(ggplot2)
-sub_GTEx = GTEx %>%
-    filter(!is.na(module)) %>%
-    group_by(module) %>%
-    summarise(
-        means = mean(Brain...Cortex)
-    ) 
-#     ggplot(data = sub_GTEx, aes(module, means), color = module)+
-#     geom_bar( width=1, stat = "identity", aes(fill=module)) +
-#     scale_fill_identity()
+# 
+# library(dplyr)
+# library(ggplot2)
+# sub_GTEx = GTEx %>%
+#     filter(!is.na(module)) %>%
+#     group_by(module) %>%
+#     summarise(
+#         means = mean(Brain...Cortex)
+#     ) 
+# #     ggplot(data = sub_GTEx, aes(module, means), color = module)+
+# #     geom_bar( width=1, stat = "identity", aes(fill=module)) +
+# #     scale_fill_identity()
 
 my_palette <- colorRampPalette(c("grey","white","orange","orangered","darkred","black"))(n = 599)
 
@@ -517,15 +524,27 @@ my_palette <- colorRampPalette(c("grey","white","orange","orangered","darkred","
 exprMat = data.matrix(GTEx[, -c(1,2,56,57,58)])
 rownames(exprMat) = GTEx$Gene.Name
 
-#LncRNAs = filter(GTEx, )
+##-- filter exprMat to remove tissues with less than 60 samples using GTEx_samples
+exprMat = exprMat[, GTEx_samples$Number.of.RNASeq.Samples > 50]
+# ### samples removed are
+#     as.character(GTEx_samples$Tissue[ !GTEx_samples$Number.of.RNASeq.Samples > 50])
+#     [1] "Minor Salivary Gland" "Kidney - Cortex"      "Bladder"              "Cervix - Ectocervix" 
+#     [5] "Fallopian Tube"       "Cervix - Endocervix" 
+
+
+brain_colors = rep("white", ncol(exprMat))
+brain_colors[grepl("brain", str_to_lower(colnames(exprMat)))] = "blue"
+
 
 library(gplots)
 library(RColorBrewer)
 #DE_lncrns = scale(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ])
 
 pdf("./Figures/DE_lncRNAs_heatmap.pdf", width = 16, height = 12)
-heatmap.2(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ] , trace="none", main="LncRNA Expression by Tissue-Type", notecol="black",key=TRUE, col=my_palette, symm=F, symkey=F, symbreaks=F, key.xlab="Scaled Median FPKM", scale ="row", margins = c(10,6))
+#heatmap.2(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ] , dendrogram = "column", trace="none", main="LncRNA Expression by Tissue-Type", notecol="black",key=TRUE, col=my_palette, symm=F, symkey=F, symbreaks=F, key.xlab="Scaled Median FPKM", scale ="row", margins = c(10,6))
+heatmap.2(t(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ]) , dendrogram = "row", trace="none", main="LncRNA Expression by Tissue-Type", notecol="black",key=TRUE, col=my_palette, symm=F, symkey=F, symbreaks=F, key.xlab="Median FPKM Scaled by LncRNA", scale ="column",RowSideColors = brain_colors, margins = c(6,12))
 dev.off()
-    
-quantile(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ])
+
+# hist(scale(t(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ])))
+# mean(scale(t(exprMat[GTEx$L2FC !=0 & GTEx$lncRNA, ])), na.rm=TRUE)
 
