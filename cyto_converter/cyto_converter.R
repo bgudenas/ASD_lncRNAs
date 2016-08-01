@@ -1,9 +1,23 @@
-rm(list=ls())
-setwd("ASD")
-rawCNVs <-read.csv("Raw/SFARI/individual-data.csv") ##7/24
-cytobands=read.csv("C:/Users//Brian/Documents/ASD/hg38_cytoBand.csv") ## http://hgdownload.cse.ucsc.edu/goldenPath/hg38/database/cytoband.txt.gz
-##cytoband input is a csv file which has "chromosome","start","end","band" column headers
+# Cyto_Converter ----------------------------------------------------------
+# Brian Gudenas. 8/1/16
+# Purpose: convert cytobands / locus to genomic coordinates
+
+# Libraries ---------------------------------------------------------------
+library(R.utils)
+library(stringr)
+
+setwd("./cyto_converter/")
+
+download.file(url = "http://hgdownload.cse.ucsc.edu/goldenPath/hg38/database/cytoBand.txt.gz", destfile = "cytoBand_HG38.txt.gz" , mode = "wb")
+R.utils:::gunzip("cytoBand_HG38.txt.gz")
+cytobands = read.table(file = "cytoBand_HG38.txt", sep = "\t")
+
+# Clean up cytobands ------------------------------------------------------
+colnames(cytobands) = c("Chromosome","Start","End","Band","Stain")
+cytobands$Chromosome = as.character(stringr::str_sub(cytobands$Chromosome, start=4))
 ### band entries are written in full with chromosome prefix Ex. 1q43.1
+cytobands$Band = paste0(cytobands$Chromosome, cytobands$Band)
+cytobands = cytobands[nchar(cytobands$Chromosome)==1, ] ## remove alt haplotypes
 
 ### CNV_ter checks for "qter"s or "pter"s which indicate entire chromosomal arms affected and outputs the entire range of the affected arm
 CNV_ter = function(band){
