@@ -6,18 +6,20 @@
 library(R.utils)
 library(stringr)
 
-setwd("./cyto_converter/")
+#setwd("C:/Users/Brian/Documents/RNAseq/Autism/cyto_converter/")
 
-download.file(url = "http://hgdownload.cse.ucsc.edu/goldenPath/hg38/database/cytoBand.txt.gz", destfile = "cytoBand_HG38.txt.gz" , mode = "wb")
-R.utils:::gunzip("cytoBand_HG38.txt.gz")
-cytobands = read.table(file = "cytoBand_HG38.txt", sep = "\t")
+# download.file(url = "http://hgdownload.cse.ucsc.edu/goldenPath/hg38/database/cytoBand.txt.gz", destfile = "cytoBand_HG38.txt.gz" , mode = "wb")
+# R.utils:::gunzip("cytoBand_HG38.txt.gz")
+cytobands = read.table(file = "C:/Users/Brian/Google Drive/ASD_lncRNAs/cyto_converter/cytoBand_HG38.txt", sep = "\t")
 
 # Clean up cytobands ------------------------------------------------------
 colnames(cytobands) = c("Chromosome","Start","End","Band","Stain")
 cytobands$Chromosome = as.character(stringr::str_sub(cytobands$Chromosome, start=4))
-### band entries are written in full with chromosome prefix Ex. 1q43.1
+### make band entries are written in full with chromosome prefix Ex. 1q43.1
 cytobands$Band = paste0(cytobands$Chromosome, cytobands$Band)
-cytobands = cytobands[nchar(cytobands$Chromosome)==1, ] ## remove alt haplotypes
+cytobands = cytobands[nchar(cytobands$Chromosome) <= 2, ] ## remove alt haplotypes
+cytobands = cytobands[cytobands$Chromosome != "M",  ] ## remove mitochondria
+
 
 ### CNV_ter checks for "qter"s or "pter"s which indicate entire chromosomal arms affected and outputs the entire range of the affected arm
 CNV_ter = function(band, chrom){
@@ -43,9 +45,10 @@ return(c(s_pos,e_pos))
 # }
 
 
+
 #### this function deals with bands that are too specific for the reference cytobands EX 1q43.11 becomes 1q43.1
-### if a match is not found after degeneration; CNV_ter is tried; else return "NAN"
-degenerate = function(band){
+### if a match is not found after degeneration; CNV_ter is tried; else return NA
+degenerate = function(band, chrom){
     original = band  ## make a copy of the input
     while (!(band %in% cytobands$Band) & nchar(band)>1) {
         band = substr(band, 1, nchar(band)-1)  ## removes last character from string
@@ -57,7 +60,7 @@ degenerate = function(band){
         s_pos = cytobands[cytobands$Band == band, 2]
         e_pos = cytobands[cytobands$Band == band, 3]
     }else if (grepl("pter|qter", original)){ ######## try CNV_ter (check for "q|p ters" else leave NAN)
-                ter_check= CNV_ter(original)
+                ter_check= CNV_ter(original, chrom)
                 s_pos=ter_check[1]
                 e_pos=ter_check[2]
     }else {  
@@ -76,14 +79,12 @@ cyto_converter = function(bands, cytobands){
     chrom_vec= vector(mode = "list", length = length(bands))
     
     for (i in 1:length(bands)){
-        s_pos="NaN"
-        e_pos="NaN"
+
         chrom= strsplit(bands[i],"p|q")[[1]][1] #split band on p OR q and select first element
         chrom_vec[i]=chrom
-        if (grepl("-",bands[i])){  ############# this chunk deals with joined cytobands. EX. 1q43-1q42
+        if (grepl("-",bands[i])) {  ##### this chunk deals with joined cytobands. EX. 1q43-1q42
             band_split = strsplit(bands[i],"-")[[1]]
             band_start = band_split[1]
-            #chrom=strsplit(bands[i],"p|q")[[1]][1]
             band_end = paste0(chrom, band_split[2])
             s_pos = cytobands[cytobands$Band == band_start, 2]
             e_pos = cytobands[cytobands$Band == band_end, 3]
@@ -93,23 +94,22 @@ cyto_converter = function(bands, cytobands){
                     matches = cytobands[grepl(band_start, cytobands$Band), ]
                     starts_vec[i] = min(matches[, 2])
                 } else  {
-                    starts_vec[i]= degenerate(band_start)[1]
+                    starts_vec[i]= degenerate(band_start, chrom)[1]
                         }
                                   } else starts_vec[i] = s_pos
-                          
             if (!(length(e_pos))) {
-                if (sum(grepl(end,cytobands$Band[cytobands$chromosome==chrom]))!=0){
+                if (sum(grepl(band_end, cytobands$Band[cytobands$Chromosome==chrom]))!=0){
                     matches = cytobands[grepl(band_end, cytobands$Band), ]
                     ends_vec[i] = max(matches[, 3])
                         } else  {
-                                ends_vec[i]= degenerate(band_end)[2]
+                                ends_vec[i]= degenerate(band_end, chrom)[2]
                                     }
                                 } else ends_vec[i] = e_pos
             
-        }else if (bands[i] %in% cytobands$Band == FALSE ){
+        }else if (bands[i] %in% cytobands$Band == FALSE ) {
             matches = cytobands[grepl(bands[i], cytobands$Band), ]
             if (nrow(matches) == 0){
-                degen_pos = degenerate(bands[i]) 
+                degen_pos = degenerate(bands[i], chrom) 
                 starts_vec[i] = degen_pos[1]
                 ends_vec[i] = degen_pos[2]
                              
@@ -132,30 +132,11 @@ colnames(results_df)<-c("Cytoband","Chromosome","Start","End")
 return(results_df)
 }
 
-
-###############################################################
-##### this code below is for testing
-test1 = cyto_converter(bands = cytobands$Band, cytobands = cytobands)
-## check against UCSC cytoband file and verify output matches exactly
-# table(test1$Start==cytobands$Start)
-# table(test1$End==cytobands$End)
-#  TRUE TRUE
-######################################################\
-# form testing script for cyto_converter (all Pters start 0; all qters end at chrom end etc ...)
-
-SFARI=cyto_converter(rawCNVs$CNV.Locus)
-
-##now extract useful CNV metadata columns for future analysis
-# colnames(rawCNVs)[c(1,2,5,6,7,8,10,14,19)]
-# [1] "chromosome"        "CNV.Locus"         "Case.Control"      "Patient.Age"       "Patient.Gender"    "Primary.Diagnosis"
-# [7] "Cognitive.Profile" "CNV.Type"          "Inheritence"      
-
-CNV_meta=rawCNVs[,c(1,2,5,6,7,8,10,14,19)]
-CNV_meta=CNV_meta[!rowSums(is.na(SFARI))>0,]
-SFARI=SFARI[!rowSums(is.na(SFARI))>0,]   ### remove any rows with atleast 1 NAN value
-#  table(SFARI$cytoband==CNV_meta$CNV.Locus)
-# TRUE 
-# 56845
-write.csv(SFARI,file="CNV/SFARI_converted_CNVs_hg38.csv",row.names=FALSE)
-
-
+top8 = cyto_converter(c("16p11.2",
+                 "15q11-13",
+                 "15q13.3",
+                 "1q21.1",
+                 "22q11",
+                 "7q11.23",
+                 "17q12",
+                 "3q29") , cytobands = cytobands)
