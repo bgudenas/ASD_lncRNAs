@@ -1,0 +1,223 @@
+---
+title: Integrative Genomic Analyses for Identification and Prioritization of Long
+  Non-Coding RNAs associated with Autism
+author: "Brian Gudenas"
+date: "November 11th, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = 'C:/Users/Brian/Google Drive/ASD_lncRNAs')
+```
+## Concise Description
+Hundreds of Autism Spectrum Disorder (ASD) risk genes have been detected which converge on specific biological pathways, however in a majority of cases causal genetic factors are unknown. Could long non-coding RNAs (lncRNAs) be involved in the dysregulation of biological processes dysregulated in ASD?
+
+### Main Objectives
+1) Identify lncRNAs differentially expressed (DE lncRNAs) in the ASD cortex (SRP007483)
+2) Build a brain developmental gene co-expression network 
+3) Map DE lncRNAs and known ASD risk genes onto the network
+4) Filter and prioritize DE lncRNAs based on co-expression to ASD genes
+
+
+```{r tximport, eval=TRUE, cache=TRUE, message=FALSE}
+#load libraries
+library(GenomicFeatures)
+library(tximport)
+library(readr)
+library(DESeq2)
+library(biomaRt)
+
+samples = read.csv("./Data/RAW/ASD_brain/samples.csv", row.names = 1) ##Sample metadata w/ rownames as sample names
+samples
+## filepath to quantification files produced by Salmon
+files = file.path("./Data/RAW/ASD_brain", paste0(rownames(samples), "_quant"), "quant.sf")
+names(files) = rownames(samples)
+
+## Gene Annotation file from  ftp://ftp.sanger.ac.uk/pub/gencode/Gencode_human/release_25/gencode.v25.annotation.gtf.gz
+txdb = makeTxDbFromGFF("./Data/RAW/Annotation/gencode.v25.annotation.gtf.gz") 
+
+k = keys(txdb, keytype = "GENEID")
+df = select(txdb, keys = k, keytype = "GENEID", columns = "TXNAME")
+tx2gene = df[ ,2:1]
+head(tx2gene) #transcript to gene map
+
+txi.salmon = tximport(files, type = "salmon", tx2gene = tx2gene, reader = read_tsv)
+colnames(txi.salmon$counts)= rownames(samples)
+
+# Differential Gene Expression Analysis
+dds = DESeqDataSetFromTximport(txi.salmon, samples, ~Class)
+dds_DE =DESeq(dds)
+res05 =results(dds_DE, alpha = 0.05, contrast = c("Class","ASD","Con")) 
+
+pdf("./Figures/MA_plot.pdf")
+plotMA(res05, main="MA plot of ASD/Con fold change", ylim=c(-4,4))
+dev.off()
+res05= res05[!is.na(res05$padj), ]  
+rownames(res05) = unlist(lapply(strsplit(rownames(res05), "\\."),"[[",1)) ## remove trailing decimals
+
+#Use biomaRt to exract gene biotypes
+mart = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+map = getBM(mart = mart, attributes=c("ensembl_gene_id","gene_biotype","start_position","end_position","chromosome_name", "external_gene_name"),filters = "ensembl_gene_id", values=rownames(res05))
+
+sig_match = match(rownames(res05),  map$ensembl_gene_id)
+res05$gene_name = map$external_gene_name[sig_match]
+res05$biotype = map$gene_biotype[sig_match]
+res05$chromosome = map$chromosome_name[sig_match]
+res05$start_pos = map$start_position[sig_match]
+res05$end_pos = map$end_position[sig_match]
+res05$entrez = map$entrezgene[sig_match]
+
+## create filter of all lncRNA biotypes as defined by Ensembl
+lncRNA_filter = c("3prime_overlapping_ncrna", "antisense","antisense RNA", "lincRNA","ncrna host","processed_transcript", "sense_intronic" , "sense_overlapping")
+
+lnc_test=c()
+for (biotype in res05$biotype) {
+    lnc_test =c(lnc_test, (sum(grepl(biotype, lncRNA_filter)) > 0 ) )
+}
+res05$lncRNA = lnc_test
+
+tab = data.frame(logFC = res05$log2FoldChange, negLogPval = -log10(res05$padj))
+
+#pdf("./Figures/Volcano.pdf")
+par(mar = c(5, 4, 4, 4))
+plot(tab, cex = 0.6, xlab=expression(Log[2]~fold~change), pch=1,
+     ylab = expression(-Log[10]~pvalue), ylim = c(0,13))
+title(main = "Differentially Expressed Genes in the ASD brain")
+lfc = 1
+pval = 0.05
+signGenes = (abs(tab$logFC) >= lfc & tab$negLogPval > -log10(pval) & !res05$lncRNA)
+points(tab[signGenes, ], pch = 1, cex = 0.8, col = "red3")
+signLncRNAs = (abs(tab$logFC) >= lfc & tab$negLogPval > -log10(pval) & res05$lncRNA)
+points(tab[signLncRNAs, ], pch = 1, cex = 0.8, col = "blue")
+abline(h = -log10(pval), col = "magenta", lty = 2, lwd = 2)
+abline(v = c(-lfc, lfc), col = "green2", lty = 2, lwd= 2)
+mtext(paste("pval =", pval), side = 4, at = -log10(pval), cex = 0.8, line = 0.5, las = 1)
+mtext(c(paste("-", lfc, "fold"), paste("+", lfc, "fold")), side = 3, at = c(-lfc, lfc),
+      cex = 0.8, line = 0.5)
+legend(3, 13, c("LncRNA","Non-lncRNA"), pch=c(1,1), col=c("blue","red3"))
+#dev.off()
+
+DEG =res05[res05$padj <= 0.05, ]
+# check # of significant DE lncRNAs
+table(DEG$lncRNA)
+## check % of lncRNAs from each lncRNA biotype
+table(DEG$biotype[DEG$lncRNA])/sum(DEG$lncRNA)*100
+#write.csv(res05,"./Data/DEG_Results_alpha05.csv")
+
+```
+We have identified `r as.numeric(table(res05$lncRNA)[[2]])` differentially expressed lncRNAs (DE lncRNAs). Next, we will construct a weighted gene co-expression network using the BrainSpan Developmental transcriptome to infer the biological functions of these lncRNAs.
+
+```{r WGCNA, cache=TRUE, message=FALSE}
+library(WGCNA)
+library(stringr)
+library(GenomicRanges)
+library(genefilter)
+options(stringsAsFactors=FALSE)
+
+Bspan_rows<-read.csv("./Data/RAW/Brainspan/rows_metadata.csv")  ##genelist of Brainspan transcriptome summarized to genes,5/15
+SFARI <-read.csv("./Data/RAW/SFARI/gene-summary.csv") #7/11/15 SFARI ASD genes, 707 total
+scores<-read.csv("./Data/RAW/SFARI/gene-score.csv") #SFARI ASD risk gene scores
+
+score_match = match(scores$Gene.Symbol, SFARI$Gene.Symbol)
+scores$entrez = SFARI$Entrez.GeneID[score_match]
+table(DEG$biotype[DEG$lncRNA])/sum(DEG$lncRNA)*100
+
+## load expression matrix and sample metadata
+Expr <- read.csv("./Data/Raw/Brainspan/expression_matrix.csv",header=FALSE,row.names=1)  ##RPKM expression data
+clinical <- read.csv("./Data/Raw/Brainspan/columns_metadata.csv",row.names=1)
+
+
+
+# convert age based on diff units to a single continous variable -- Months Post-conception (conception ~10 months)
+clinical$Months.Post.Conception = 0
+for (i in 1:nrow(clinical)) {
+    age = as.numeric(strsplit(clinical$age[i], " ")[[1]][1])
+    unit = strsplit(clinical$age[i], " ")[[1]][2]
+    
+    if (unit == "pcw"){ age = age/4 #convert to months
+        }else if (unit == "mos") { age = age+10 ## already in months but need to add 10 months for conception
+        }else if (unit == "yrs") { age = (age*12)+10}## convert years to months then add 10 for conception
+    clinical$Months.Post.Conception[i]=age
+}
+
+# create unique IDs for Expr and clinical samples -------------------------
+colnames(Expr)<-str_c(clinical$structure_acronym, clinical$Months.Post.Conception, clinical$gender,clinical$donor_id, sep="_")
+rownames(clinical) = colnames(Expr)
+
+# filter samples to only retain regions within the neocortex by matching " cortex" and not cerebellar cortex which is in the cerebellum and not neocortex
+cortical_regions = grepl(" cortex", clinical$structure_name) & clinical$structure_name != "cerebellar cortex"
+# double-check brain regions included in analysis
+table(clinical$structure_name[cortical_regions])
+#Remove the  primary motor-sensory cortex bc has only 5 samples while the rest all have ~30
+cortical_regions = grepl(" cortex", clinical$structure_name) & clinical$structure_name != "cerebellar cortex" & clinical$structure_name != "primary motor-sensory cortex (samples)"
+
+## total number of samples included for downstream analysis
+sum(cortical_regions)
+
+# filter clinical and Expr by cortical_region -----------------------------
+clinical = clinical[cortical_regions, ]
+Expr = Expr[ ,cortical_regions] 
+rownames(Expr) = Bspan_rows$ensembl_gene_id
+
+Gene_filter = rowVars(Expr) > 0.5
+datExpr0 = Expr[Gene_filter, ] ## variance filter to remove lowly expressed genes
+datExpr0 = t(datExpr0)
+dim(datExpr0)
+
+##--Create Genelist dataframe containing all gene info from (DEG and SFARI)
+genelist = Bspan_rows[Gene_filter,]
+DEG_map = match(genelist$ensembl_gene_id, rownames(DEG))
+
+genelist$L2FC = DEG$log2FoldChange[DEG_map]
+genelist$L2FC[is.na(genelist$L2FC)] = 0    ### Give 0 to any gene not Differentially expressed
+## number of DEG genes not present in the filtered BrainSpan Dataset
+nrow(DEG) - table(genelist$L2FC!=0)[[2]]
+
+mart = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+map = getBM(mart = mart, attributes = c("ensembl_gene_id","band","gene_biotype","chromosome_name","start_position","end_position"),
+            filters = "ensembl_gene_id", values =  genelist$ensembl_gene_id)
+
+mart_map = match(genelist$ensembl_gene_id, map$ensembl_gene_id)
+
+genelist$biotype = map$gene_biotype[mart_map]
+genelist$chromosome = map$chromosome_name[mart_map]
+genelist$start = map$start_position[mart_map]
+genelist$end = map$end_position[mart_map]
+
+ASD_match = match(genelist$entrez_id, scores$entrez)
+genelist$ASD_score = scores$Score[ASD_match]
+
+lnc_test=c()
+for (biotype in genelist$biotype) {
+    lnc_test =c(lnc_test, (sum(grepl(biotype, lncRNA_filter)) > 0))
+}
+genelist$lncRNA = lnc_test
+
+LncRNA_Gr = makeGRangesFromDataFrame(DEG[DEG$lncRNA, colnames(DEG)=="chromosome" | colnames(DEG)=="start_pos" |  colnames(DEG)=="end_pos"], start.field = "start_pos", end.field = "end_pos" )
+genelist_Gr = makeGRangesFromDataFrame(genelist[genelist$lncRNA != TRUE & !is.na(genelist$start), colnames(genelist)=="chromosome" | colnames(genelist)=="start" |  colnames(genelist)=="end" ], start.field = "start", end.field = "end" )
+names(genelist_Gr) = genelist$gene_symbol[genelist$lncRNA != TRUE & !is.na(genelist$start) ]
+
+near_genes = names(genelist_Gr)[nearest(x = LncRNA_Gr, subject = genelist_Gr)]
+DEG$nearest[DEG$lncRNA] = near_genes
+DEG$nearest_ASD_score[DEG$lncRNA] = genelist$ASD_score[match( near_genes, genelist$gene_symbol)]
+DEG$Gene_symbol  = genelist$gene_symbol[match(rownames(DEG), genelist$ensembl_gene_id)]
+
+table(rownames(clinical)==rownames(datExpr0)) ## verify clinical matches expression for all samples
+
+
+gsg = goodSamplesGenes(datExpr0,verbose=4);
+if (!gsg$allOK)
+{
+    if (sum(!gsg$goodGenes)>0)
+        printFlush(paste("Removing genes:", paste(colnames(datExpr0)[!gsg$goodGenes], collapse = ", ")));
+    if (sum(!gsg$goodSamples)>0)
+        printFlush(paste("Removing samples:", paste(rownames(datExpr0)[!gsg$goodSamples], collapse = ", ")))
+    datExpr0= datExpr0[gsg$goodSamples, gsg$goodGenes]
+    genelist=genelist[gsg$goodGenes,]
+}
+
+datExpr0 <- log2(datExpr0+1)
+
+powers = c(seq(8,14,by=1), seq(14,26, by=2));
+```
