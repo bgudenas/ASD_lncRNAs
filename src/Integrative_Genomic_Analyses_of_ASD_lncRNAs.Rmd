@@ -20,39 +20,35 @@ Hundreds of Autism Spectrum Disorder (ASD) risk genes have been detected which c
 4) Filter and prioritize DE lncRNAs based on co-expression to ASD genes
 
 
-```{r tximport, eval=TRUE, cache=TRUE, message=FALSE}
+```{r tximport, eval=TRUE, cache=TRUE, message=FALSE, echo=TRUE}
 #load libraries
 library(GenomicFeatures)
 library(tximport)
 library(readr)
 library(DESeq2)
 library(biomaRt)
+library(WGCNA)
+library(dplyr)
+library(stringr)
+library(GenomicRanges)
+library(genefilter)
+library(gplots)
+library(RColorBrewer)
+options(stringsAsFactors=FALSE)
 
-samples = read.csv("./Data/RAW/ASD_brain/samples.csv", row.names = 1) ##Sample metadata w/ rownames as sample names
-samples
-## filepath to quantification files produced by Salmon
-files = file.path("./Data/RAW/ASD_brain", paste0(rownames(samples), "_quant"), "quant.sf")
-names(files) = rownames(samples)
+# Load in all Supplementary Input Data
+load(file="./Data/All_Sup_Data.RData")
 
-## Gene Annotation file from  ftp://ftp.sanger.ac.uk/pub/gencode/Gencode_human/release_25/gencode.v25.annotation.gtf.gz
-txdb = makeTxDbFromGFF("./Data/RAW/Annotation/gencode.v25.annotation.gtf.gz") 
-
-k = keys(txdb, keytype = "GENEID")
-df = select(txdb, keys = k, keytype = "GENEID", columns = "TXNAME")
-tx2gene = df[ ,2:1]
-head(tx2gene) #transcript to gene map
-
-txi.salmon = tximport(files, type = "salmon", tx2gene = tx2gene, reader = read_tsv)
-colnames(txi.salmon$counts)= rownames(samples)
+colnames(txi.salmon$counts)= rownames(DEG_samples)
 
 # Differential Gene Expression Analysis
-dds = DESeqDataSetFromTximport(txi.salmon, samples, ~Class)
+dds = DESeqDataSetFromTximport(txi.salmon, DEG_samples, ~Class)
 dds_DE =DESeq(dds)
 res05 =results(dds_DE, alpha = 0.05, contrast = c("Class","ASD","Con")) 
 
-pdf("./Figures/MA_plot.pdf")
+# pdf("./Figures/MA_plot.pdf")
 plotMA(res05, main="MA plot of ASD/Con fold change", ylim=c(-4,4))
-dev.off()
+# dev.off()
 res05= res05[!is.na(res05$padj), ]  
 rownames(res05) = unlist(lapply(strsplit(rownames(res05), "\\."),"[[",1)) ## remove trailing decimals
 
@@ -79,7 +75,7 @@ res05$lncRNA = lnc_test
 
 tab = data.frame(logFC = res05$log2FoldChange, negLogPval = -log10(res05$padj))
 
-#pdf("./Figures/Volcano.pdf")
+# pdf("./Figures/Volcano.pdf")
 par(mar = c(5, 4, 4, 4))
 plot(tab, cex = 0.6, xlab=expression(Log[2]~fold~change), pch=1,
      ylab = expression(-Log[10]~pvalue), ylim = c(0,13))
@@ -96,7 +92,7 @@ mtext(paste("pval =", pval), side = 4, at = -log10(pval), cex = 0.8, line = 0.5,
 mtext(c(paste("-", lfc, "fold"), paste("+", lfc, "fold")), side = 3, at = c(-lfc, lfc),
       cex = 0.8, line = 0.5)
 legend(3, 13, c("LncRNA","Non-lncRNA"), pch=c(1,1), col=c("blue","red3"))
-#dev.off()
+# dev.off()
 
 DEG =res05[res05$padj <= 0.05, ]
 # check # of significant DE lncRNAs
@@ -108,32 +104,15 @@ table(DEG$biotype[DEG$lncRNA])/sum(DEG$lncRNA)*100
 ```
 We have identified `r as.numeric(table(res05$lncRNA)[[2]])` differentially expressed lncRNAs (DE lncRNAs). Next, we will construct a weighted gene co-expression network using the BrainSpan Developmental transcriptome to infer the biological functions of these lncRNAs.
 
-```{r WGCNA, cache=TRUE, message=FALSE}
-library(WGCNA)
-library(stringr)
-library(GenomicRanges)
-library(genefilter)
-options(stringsAsFactors=FALSE)
-
-Bspan_rows<-read.csv("./Data/RAW/Brainspan/rows_metadata.csv")  ##genelist of Brainspan transcriptome summarized to genes,5/15
-SFARI <-read.csv("./Data/RAW/SFARI/gene-summary.csv") #7/11/15 SFARI ASD genes, 707 total
-scores<-read.csv("./Data/RAW/SFARI/gene-score.csv") #SFARI ASD risk gene scores
-
-score_match = match(scores$Gene.Symbol, SFARI$Gene.Symbol)
-scores$entrez = SFARI$Entrez.GeneID[score_match]
-table(DEG$biotype[DEG$lncRNA])/sum(DEG$lncRNA)*100
-
-## load expression matrix and sample metadata
-Expr <- read.csv("./Data/Raw/Brainspan/expression_matrix.csv",header=FALSE,row.names=1)  ##RPKM expression data
-clinical <- read.csv("./Data/Raw/Brainspan/columns_metadata.csv",row.names=1)
-
-
+```{r WGCNA, cache=TRUE, message=FALSE, eval=TRUE}
+score_match = match(SFARI_scores$Gene.Symbol, SFARI$Gene.Symbol)
+SFARI_scores$entrez = SFARI$Entrez.GeneID[score_match]
 
 # convert age based on diff units to a single continous variable -- Months Post-conception (conception ~10 months)
 clinical$Months.Post.Conception = 0
 for (i in 1:nrow(clinical)) {
-    age = as.numeric(strsplit(clinical$age[i], " ")[[1]][1])
-    unit = strsplit(clinical$age[i], " ")[[1]][2]
+    age = as.numeric(strsplit(as.character(clinical$age[i]), " ")[[1]][1])
+    unit = strsplit(as.character(clinical$age[i]), " ")[[1]][2]
     
     if (unit == "pcw"){ age = age/4 #convert to months
         }else if (unit == "mos") { age = age+10 ## already in months but need to add 10 months for conception
@@ -161,7 +140,7 @@ Expr = Expr[ ,cortical_regions]
 rownames(Expr) = Bspan_rows$ensembl_gene_id
 
 Gene_filter = rowVars(Expr) > 0.5
-datExpr0 = Expr[Gene_filter, ] ## variance filter to remove lowly expressed genes
+datExpr0 = Expr[Gene_filter, ] ## variance filter to remove lowly variable genes
 datExpr0 = t(datExpr0)
 dim(datExpr0)
 
@@ -185,8 +164,8 @@ genelist$chromosome = map$chromosome_name[mart_map]
 genelist$start = map$start_position[mart_map]
 genelist$end = map$end_position[mart_map]
 
-ASD_match = match(genelist$entrez_id, scores$entrez)
-genelist$ASD_score = scores$Score[ASD_match]
+ASD_match = match(genelist$entrez_id, SFARI_scores$entrez)
+genelist$ASD_score = SFARI_scores$Score[ASD_match]
 
 lnc_test=c()
 for (biotype in genelist$biotype) {
@@ -220,4 +199,287 @@ if (!gsg$allOK)
 datExpr0 <- log2(datExpr0+1)
 
 powers = c(seq(8,14,by=1), seq(14,26, by=2));
+rm(Expr, tab, txi.salmon, res05, dds, dds_DE, gsg, mart_map, near_genes, signLncRNAs, signGenes)
+
+save.image("./Data/pre_network.RData")
+```
+Now we will check samples for outliers and subsequently create the gene co-expression network. It is important that this next code block is run on a machine with at least 16GB of RAM.
+```{r create_network, eval=FALSE}
+load("./Data/pre_network.RData")
+
+sft=pickSoftThreshold(datExpr0, powerVector=powers, verbose=5, networkType="signed", corFnc = "bicor",corOptions = list(use = 'p', maxPOutliers = 0.1), blockSize = 20000)
+
+sft
+power=sft$fitIndices$Power[sft$fitIndices$SFT.R.sq > 0.80][1] ##select lowest power with R^2 > 0.8
+
+net = blockwiseModules(datExpr0, power = power,
+                       networkType="signed", minModuleSize = 50, maxBlockSize = 20000,
+                       mergeCutHeight = 0.15, deepsplit=4, corType= "bicor",corOptions = list(use = 'p', maxPOutliers = 0.1),
+                       numericLabels = TRUE, pamRespectsDendro = FALSE,
+                       saveTOMs = TRUE,
+                       saveTOMFileBase = "./Data/TOM",
+                       verbose = 3 )
+save.image("./Data/Network.RData")
+
+```
+
+lets check it out
+```{r post-network, cache=TRUE}
+load(file="./Data/Network.RData")
+table(net$colors)
+
+lncrnaColors = rep("grey", nrow(genelist))
+DEGcolors = rep("grey", nrow(genelist))
+ASDcolors = rep("grey", nrow(genelist))
+lncrnaColors[genelist$lncRNA == TRUE] = "red3"
+DEGcolors[genelist$L2FC != 0 ] = "blue3"
+ASDcolors[!is.na(genelist$ASD_score) ] = "black"
+moduleColors = labels2colors(net$colors)
+genelist$Module = moduleColors
+
+# pdf("./Figures/Dendrogram.pdf")
+plotDendroAndColors(net$dendrograms[[1]], cbind(moduleColors,lncrnaColors, DEGcolors, ASDcolors),
+                    c("Module","LncRNAs","DEG", "ASD"),
+                    dendroLabels = FALSE, hang = 0.03,
+                    addGuide = TRUE, guideHang = 0.05)
+# dev.off()
+moduleLabels = net$colors
+
+MEs = net$MEs;
+geneTree = net$dendrograms[[1]];
+nGenes = ncol(datExpr0)
+nSamples=nrow(datExpr0)
+
+## calculate MEs with module colors
+MEs0 <-moduleEigengenes(datExpr0,moduleColors)$eigengenes
+MEs = orderMEs(MEs0)
+
+counts = model.matrix( ~structure_acronym - 1, data = clinical)
+colnames(counts) = str_replace(colnames(counts), pattern = "structure_acronym", replacement = "")
+counts =counts[, colSums(counts)!=0]
+
+clinical = cbind(clinical, counts)
+clinical$Male = rep(0, nrow(clinical))
+clinical$Male[clinical$gender=="M"] = 1
+moduleTraitCor = cor(MEs, clinical[ ,c(8:ncol(clinical))], use = "p");
+moduleTraitPvalue = corPvalueStudent(moduleTraitCor, nSamples);
+
+textMatrix = paste(signif(moduleTraitCor, 2), "\n(",
+                   signif(moduleTraitPvalue, 1), ")", sep = "");
+dim(textMatrix) = dim(moduleTraitCor)
+
+#pdf("./Figures/Module-trait_relationships.pdf",width=14,height=7)
+labeledHeatmap(Matrix = moduleTraitCor,
+               xLabels = names(clinical[, c(8:ncol(clinical))]),
+               yLabels = names(MEs),
+               ySymbols = names(MEs),
+               colorLabels = FALSE,
+               colors = greenWhiteRed(60),
+               textMatrix = textMatrix,
+               setStdMargins = FALSE,
+               cex.text = 0.5,
+               zlim = c(-1,1),
+               main = paste("Module-trait relationships") )
+# dev.off()
+
+age=as.data.frame(clinical$Months.Post.Conception)
+names(age)="Months_Age"
+modNames=substring(names(MEs),3)
+geneModuleMembership = as.data.frame(cor(datExpr0, MEs, use = "p"));
+
+genes<-colnames(datExpr0)
+genes2annot <- match(genes, genelist$ensembl_gene_id)
+sum(is.na(genes2annot))
+
+MMPvalue = as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership), nSamples));
+names(geneModuleMembership) = paste("MM", modNames, sep="");
+names(MMPvalue) = paste("p.MM", modNames, sep="");
+geneTraitSignificance = as.data.frame(cor(datExpr0, age, use = "p"));
+GSPvalue = as.data.frame(corPvalueStudent(as.matrix(geneTraitSignificance), nSamples));
+
+names(geneTraitSignificance) = paste("GS.", names(age), sep="");
+names(GSPvalue) = paste("p.GS.", names(age), sep="");
+
+geneInfo= data.frame(Ensembl_ID = genelist$ensembl_gene_id,
+                     gene_symbol= genelist$gene_symbol,
+                     Log2FC_DE = genelist$L2FC,
+                     lncRNA=genelist$lncRNA,
+                     ASD=genelist$ASD_score,
+                     moduleColor = moduleColors,
+                     geneTraitSignificance,
+                     GSPvalue)
+modOrder = order(-abs(cor(MEs, age, use = "p")));
+
+for (mod in 1:ncol(geneModuleMembership))
+{
+    oldNames = names(geneInfo)
+    geneInfo = data.frame(geneInfo, geneModuleMembership[, modOrder[mod]],
+                          MMPvalue[, modOrder[mod]]);
+    names(geneInfo) = c(oldNames, paste("MM.", modNames[modOrder[mod]], sep=""),
+                        paste("p.MM.", modNames[modOrder[mod]], sep=""))
+}
+geneOrder = order(geneInfo$moduleColor, -abs(geneInfo$GS.Months_Age));
+geneInfo = geneInfo[geneOrder, ]
+write.csv(geneInfo, file = "./Data/geneInfo.csv",row.names = FALSE )
+
+genelist$ASD_score = as.character(genelist$ASD_score)
+genelist$ASD_score[is.na(genelist$ASD_score)]=0
+
+moduleMembership = vector(mode = "numeric", length = nrow(geneInfo))
+for (i in 1:nrow(geneInfo)){
+    module = paste0("MM.",geneInfo$moduleColor[i])
+    moduleMembership[i] = select(geneInfo,  match(module, colnames(geneInfo)))[i,]
+}
+geneInfo$Membership = moduleMembership
+genelist$membership =geneInfo$Membership[match(genelist$ensembl_gene_id, geneInfo$Ensembl_ID)]
+save.image("./Data/Post_geneinfo_network.RData")
+
+my_palette <- colorRampPalette(c("dark green","green","white","white","red","dark red"))(n = 599)
+
+
+Module_dist = cor(MEs0,MEs0)
+Modules0= paste(paste0(toupper(substr(names(table(moduleColors)), 1, 1)), tolower(substring(names(table(moduleColors)), 2))))
+rownames(Module_dist) = Modules0
+colnames(Module_dist) = Modules0
+
+#pdf("./Figures/ModuleCor_heatmap.pdf")
+heatmap.2(Module_dist,trace="none",main="Module Correlation Matrix",RowSideColors=names(table(moduleColors)),notecol="black",key=TRUE,col=my_palette,symm=F,symkey=F,symbreaks=F)
+#dev.off()
+
+
+###### this code is for modular analysis of ASD genes and lncRNAS
+genelist$Module = moduleColors
+
+genelist$ASD_score = as.character(genelist$ASD_score)
+genelist$ASD_score[is.na(genelist$ASD_score)]=0
+
+mod_sum<-matrix(data=NA,nrow=length(table(moduleColors)),ncol=4)
+colnames(mod_sum) <- c("DE_lncRNAs","SFARI ASD Genes","ME16","total")
+rownames(mod_sum) <- names(table(moduleColors))
+
+ME16_match = match(genelist$ensembl_gene_id, ME16)
+genelist$ME16=0
+genelist$ME16[!is.na(ME16_match)]=1
+
+LncRNAs_DE = as.list(table(factor(moduleColors[genelist$lncRNA== TRUE & genelist$L2FC != 0],lev=rownames(mod_sum))))
+mod_sum[,1] = as.numeric(LncRNAs_DE)
+
+
+SFARI = table(factor(moduleColors[genelist$ASD_score=="1S" | genelist$ASD_score=="2S" | genelist$ASD_score=="3S" | genelist$ASD_score=="4S" | genelist$ASD_score==1 | genelist$ASD_score==2  | genelist$ASD_score==3 | genelist$ASD_score==4 | genelist$ASD_score==5],lev=rownames(mod_sum)))
+mod_sum[,2] = as.numeric(SFARI)
+
+ME16 = table(factor(moduleColors[genelist$ME16==1],lev=rownames(mod_sum)))
+mod_sum[,3] = as.numeric(ME16)
+
+mod_totals <- as.list(table(moduleColors))
+mod_sum[,4]= as.numeric(mod_totals)
+
+mod_sum = mod_sum[mod_sum[,1] > 1, ] ## remove modules with no lncRNAs
+
+total_genes = nGenes
+mat_p = matrix(data=NA, nrow=nrow(mod_sum), ncol=3)
+mat_or = matrix(data=NA, nrow=nrow(mod_sum), ncol=3)
+for (row in 1:nrow(mod_sum)){
+    for (col in 1:3) {
+        mod_total <- as.numeric(mod_sum[row, 4])
+        mod_count <- as.numeric(mod_sum[row, col])
+        mod_non <- mod_total-mod_count
+        non_count <- sum(as.numeric(mod_sum[,col])) - mod_count       
+        non_non <- (total_genes-mod_total)-non_count
+        
+        contigency <- matrix(c(mod_count, mod_non, non_count, non_non),2,2)
+        colnames(contigency) = c(rownames(mod_sum)[row], paste0("Non-", rownames(mod_sum)[row]))
+        rownames(contigency) = c(colnames(mod_sum)[col], paste0("Non-", colnames(mod_sum)[col]))
+        
+        results <- fisher.test(contigency, alternative = "greater")
+        p_val <- results[[1]]
+        OR <- results[[3]]
+        
+        mat_p[row,col]<-p_val
+        mat_or[row,col]<-OR
+    }
+}
+
+rownames(mat_p)<-rownames(mod_sum)
+rownames(mat_or)<-rownames(mod_sum)
+colnames(mat_p)<-colnames(mod_sum)[1:3]
+colnames(mat_or)<-colnames(mod_sum)[1:3]
+### now correct P-values for each test using FDR method
+ ad_p = p.adjust(mat_p, method = "fdr")
+dim(ad_p) = dim(mat_p)
+colnames(ad_p) <-colnames(mat_p)
+rownames(ad_p) <- rownames(mat_p)
+OR_filter<-matrix(data=NA,ncol=3,nrow=nrow(ad_p))
+### * = p-value < 0.05 || ** = FDR-adjusted p-value < 0.05 ##### both need OR >= 1
+OR_filter[ad_p <= 0.05] <- "*"
+OR_filter[mat_or >= 1 & ad_p <= 0.05] <- paste0(round(mat_or[mat_or >= 1 & ad_p <= 0.05 ],2))
+
+# log transform
+ad_p<-log10(ad_p)*-1 
+rownames(OR_filter)<-rownames(ad_p)
+
+my_palette <- colorRampPalette(c("white","orange","red"))(n = 399)
+ Modules_cap = paste0(toupper(substr(rownames(ad_p), 1, 1)), tolower(substring(rownames(ad_p), 2)))
+rownames(ad_p) = Modules_cap
+
+#pdf("./Figures/module_geneset_enrichment.pdf")
+heatmap.2(ad_p, cellnote=OR_filter, trace="none", main="ASD Gene Set Enrichment by Module", RowSideColors=Modules_cap, notecol="black",key=TRUE, col=my_palette, symm=F, symkey=F, symbreaks=F, key.xlab="-Log( FDR adjusted p-value )", notecex =1.5, margins =c(13,8), breaks = seq(0, 15, length.out =400))
+
+#dev.off()
+```
+Next we perform co-expression permutations to quantify the strength to which DE lncRNAs are co-expressed with ASD risk genes.
+```{r co-expression permutation}
+lncRNAlist = genelist[genelist$lncRNA & genelist$L2FC !=0, ]
+
+ASD_lncMatch = match( lncRNAlist$ensembl_gene_id , colnames(datExpr0))
+genelist$ASD_score[is.na(genelist$ASD_score)] = 0
+ASD_genes = genelist$ASD_score != 0 & genelist$ASD_score != "S" & genelist$ASD_score != "6" & genelist$ASD_score != "5" 
+
+LncRNA_ASD_mat = bicor(datExpr0[ ,ASD_lncMatch], datExpr0[ ,ASD_genes], use="p", maxPOutliers = 0.1)
+lncRNA_ASD_pairs=sum(abs(LncRNA_ASD_mat))
+
+P=10000 ## iterations
+sig_pairs=c()
+lnc_num = nrow(LncRNA_ASD_mat)
+for (iter in 1:P){
+    chosen = sample(1:ncol(datExpr0), lnc_num, replace = FALSE)
+    chosen_ASD_mat = bicor( datExpr0[,chosen], datExpr0[ , ASD_genes], use="p", maxPOutliers = 0.1)
+    sig_pairs=c(sig_pairs, sum(abs(chosen_ASD_mat)))
+}
+Z_scores = scale(c(sig_pairs,lncRNA_ASD_pairs)) ## calculate Z_scores of randomized distribution with actual value on end
+Lnc_score = Z_scores[length(Z_scores)] ## Z_score of Actual lncRNA ASD pairs
+pnorm(-abs(Lnc_score))
+
+#pdf("./Figures/LncRNA_coexpression_ASD-risk-genes.pdf")
+hist(sig_pairs,,ylim=range(0,2600), xlab = "Summed Correlation", main = "LncRNAs co-expression to random gene-sets compared to ASD risk genes")
+abline(v=lncRNA_ASD_pairs, lwd = 2, col = "red")
+text(lncRNA_ASD_pairs-100,2500, pnorm(-abs(Lnc_score)), srt = 0.1, pos = 1, cex=1.2)
+#dev.off()
+
+
+####################
+#Perform same permutation test for ME16 genes
+ME16_genes = genelist$ME16==1
+
+LncRNA_ASD_mat = bicor(datExpr0[,ASD_lncMatch], datExpr0[, ME16_genes], use="p", maxPOutliers = 0.1)
+
+lncRNA_ASD_pairs=sum(abs(LncRNA_ASD_mat))
+P=10000 ## iterations
+sig_pairs=c()
+lnc_num = nrow(LncRNA_ASD_mat)
+for (iter in 1:P){
+    chosen = sample(1:ncol(datExpr0), lnc_num, replace = FALSE)
+    chosen_ASD_mat = bicor( datExpr0[,chosen], datExpr0[,ME16_genes], use="p", maxPOutliers = 0.1)
+    sig_pairs=c(sig_pairs, sum(abs(chosen_ASD_mat)))
+}
+Z_scores = scale(c(sig_pairs,lncRNA_ASD_pairs)) ## calculate Z_scores of randomized distribution with actual value on end
+Lnc_score = Z_scores[length(Z_scores)] ## Z_score of Actual lncRNA ASD pairs
+pval = pnorm(-abs(Lnc_score))
+
+
+#pdf("./Figures/LncRNA_coexpression_ME16-risk-genes.pdf")
+hist(sig_pairs, xlab = "Summed Correlation", main = "LncRNAs co-expression to random gene-sets compared to ME16 genes")
+abline(v= lncRNA_ASD_pairs, lwd = 2, col = "red")
+text(lncRNA_ASD_pairs-100,1500, pval, srt = 0.1, pos = 1, cex=1.2)
+#dev.off()
 ```
