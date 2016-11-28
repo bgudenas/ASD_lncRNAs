@@ -345,13 +345,8 @@ colnames(Module_dist) = Modules0
 #pdf("./Figures/ModuleCor_heatmap.pdf")
 heatmap.2(Module_dist,trace="none",main="Module Correlation Matrix",RowSideColors=names(table(moduleColors)),notecol="black",key=TRUE,col=my_palette,symm=F,symkey=F,symbreaks=F)
 #dev.off()
-
-
 ###### this code is for modular analysis of ASD genes and lncRNAS
 genelist$Module = moduleColors
-
-genelist$ASD_score = as.character(genelist$ASD_score)
-genelist$ASD_score[is.na(genelist$ASD_score)]=0
 
 mod_sum<-matrix(data=NA,nrow=length(table(moduleColors)),ncol=4)
 colnames(mod_sum) <- c("DE_lncRNAs","SFARI ASD Genes","ME16","total")
@@ -413,7 +408,6 @@ OR_filter<-matrix(data=NA,ncol=3,nrow=nrow(ad_p))
 ### * = p-value < 0.05 || ** = FDR-adjusted p-value < 0.05 ##### both need OR >= 1
 OR_filter[ad_p <= 0.05] <- "*"
 OR_filter[mat_or >= 1 & ad_p <= 0.05] <- paste0(round(mat_or[mat_or >= 1 & ad_p <= 0.05 ],2))
-
 # log transform
 ad_p<-log10(ad_p)*-1 
 rownames(OR_filter)<-rownames(ad_p)
@@ -428,7 +422,7 @@ heatmap.2(ad_p, cellnote=OR_filter, trace="none", main="ASD Gene Set Enrichment 
 #dev.off()
 ```
 Next we perform co-expression permutations to quantify the strength to which DE lncRNAs are co-expressed with ASD risk genes.
-```{r co-expression permutation}
+```{r co-expression permutation, message = FALSE, cache = TRUE}
 lncRNAlist = genelist[genelist$lncRNA & genelist$L2FC !=0, ]
 
 ASD_lncMatch = match( lncRNAlist$ensembl_gene_id , colnames(datExpr0))
@@ -439,21 +433,25 @@ LncRNA_ASD_mat = bicor(datExpr0[ ,ASD_lncMatch], datExpr0[ ,ASD_genes], use="p",
 lncRNA_ASD_pairs=sum(abs(LncRNA_ASD_mat))
 
 P=10000 ## iterations
-sig_pairs=c()
+sig_pairs=vector(mode = "numeric",length = P)
 lnc_num = nrow(LncRNA_ASD_mat)
 for (iter in 1:P){
     chosen = sample(1:ncol(datExpr0), lnc_num, replace = FALSE)
     chosen_ASD_mat = bicor( datExpr0[,chosen], datExpr0[ , ASD_genes], use="p", maxPOutliers = 0.1)
-    sig_pairs=c(sig_pairs, sum(abs(chosen_ASD_mat)))
+    sig_pairs[iter]= sum(abs(chosen_ASD_mat))
 }
 Z_scores = scale(c(sig_pairs,lncRNA_ASD_pairs)) ## calculate Z_scores of randomized distribution with actual value on end
 Lnc_score = Z_scores[length(Z_scores)] ## Z_score of Actual lncRNA ASD pairs
 pnorm(-abs(Lnc_score))
 
 #pdf("./Figures/LncRNA_coexpression_ASD-risk-genes.pdf")
-hist(sig_pairs,,ylim=range(0,2600), xlab = "Summed Correlation", main = "LncRNAs co-expression to random gene-sets compared to ASD risk genes")
-abline(v=lncRNA_ASD_pairs, lwd = 2, col = "red")
-text(lncRNA_ASD_pairs-100,2500, pnorm(-abs(Lnc_score)), srt = 0.1, pos = 1, cex=1.2)
+hist(sig_pairs,ylim=range(0,2600), xlab = "Summed Correlation", main = "LncRNAs co-expression to random gene-sets compared to ASD risk genes")
+## Use color of line at LncRNAs real value to indicate significance
+col="black"
+if ( p.adjust(pnorm(-abs(Lnc_score)), n = 2, method = "fdr") <= 0.05 ) {
+    col="red" }
+abline(v=lncRNA_ASD_pairs, lwd = 3, col = col)
+
 #dev.off()
 
 
@@ -465,12 +463,12 @@ LncRNA_ASD_mat = bicor(datExpr0[,ASD_lncMatch], datExpr0[, ME16_genes], use="p",
 
 lncRNA_ASD_pairs=sum(abs(LncRNA_ASD_mat))
 P=10000 ## iterations
-sig_pairs=c()
+sig_pairs=vector(mode = "numeric",length = P)
 lnc_num = nrow(LncRNA_ASD_mat)
 for (iter in 1:P){
     chosen = sample(1:ncol(datExpr0), lnc_num, replace = FALSE)
     chosen_ASD_mat = bicor( datExpr0[,chosen], datExpr0[,ME16_genes], use="p", maxPOutliers = 0.1)
-    sig_pairs=c(sig_pairs, sum(abs(chosen_ASD_mat)))
+    sig_pairs[iter]= sum(abs(chosen_ASD_mat))
 }
 Z_scores = scale(c(sig_pairs,lncRNA_ASD_pairs)) ## calculate Z_scores of randomized distribution with actual value on end
 Lnc_score = Z_scores[length(Z_scores)] ## Z_score of Actual lncRNA ASD pairs
@@ -479,7 +477,140 @@ pval = pnorm(-abs(Lnc_score))
 
 #pdf("./Figures/LncRNA_coexpression_ME16-risk-genes.pdf")
 hist(sig_pairs, xlab = "Summed Correlation", main = "LncRNAs co-expression to random gene-sets compared to ME16 genes")
-abline(v= lncRNA_ASD_pairs, lwd = 2, col = "red")
-text(lncRNA_ASD_pairs-100,1500, pval, srt = 0.1, pos = 1, cex=1.2)
+## Use color of line at LncRNAs real value to indicate significance
+col="black"
+if ( p.adjust(pnorm(-abs(Lnc_score)), n = 2, method = "fdr") <= 0.05 ) {
+    col="red" }
+abline(v=lncRNA_ASD_pairs, lwd = 3, col = col)
 #dev.off()
+
+DEG_match = match(rownames(DEG), genelist$ensembl_gene_id[ASD_genes])
+DE_ASD = table(is.na(DEG_match))[1]
+NotDE_ASD = length(genelist$ensembl_gene_id[ASD_genes]) - DE_ASD
+DE_nonASD = nrow(DEG)-length(genelist$ensembl_gene_id[ASD_genes])
+NotDE_nonASD = nrow(genelist) - nrow(DEG)
+
+contingency = matrix(nrow=2,ncol=2, data = c(DE_ASD, DE_nonASD, NotDE_ASD, NotDE_nonASD))
+rownames(contingency) = c("ASD","non-ASD")
+colnames(contingency) = c("DE", "Not DE")
+contingency
+#         DE Not DE
+# ASD       54    267
+# non-ASD 1664  21035
+fisher.test(contingency, "greater")
+
+GTEx_samples = GTEx_samples[order(GTEx_samples$Tissue), ]  ## reorder samples to match GTEx columns (alphabetical)
+
+match_GTEx = match(GTEx$Gene.Name, genelist$gene_symbol)
+GTEx$module = genelist$Module[match_GTEx]
+GTEx$lncRNA = genelist$lncRNA[match_GTEx]
+GTEx$L2FC = genelist$L2FC[match_GTEx]
+
+## remove genes not in network
+GTEx = GTEx[!is.na(GTEx$module), ]
+
+
+sub_GTEx = GTEx %>%
+    group_by(module) %>%
+    summarise(
+        means = mean(Brain...Cortex)
+    ) 
+    ggplot(data = sub_GTEx, aes(module, means), color = module)+
+    geom_bar( width=1, stat = "identity", aes(fill=module)) +
+    scale_fill_identity()
+
+exprMat = data.matrix(GTEx[, -c(1,2,56,57,58)])
+rownames(exprMat) = GTEx$Gene.Name
+
+##-- filter exprMat to remove tissues with less than 60 samples using GTEx_samples
+exprMat = exprMat[GTEx$L2FC !=0 & GTEx$lncRNA , GTEx_samples$Number.of.RNASeq.Samples > 50]
+
+brain_colors = rep("white", ncol(exprMat))
+brain_colors[grepl("brain", str_to_lower(colnames(exprMat)))] = "blue"
+
+
+exprMat = scale(t(exprMat))
+exprMat = exprMat[ ,colSums(is.na(exprMat))!=nrow(exprMat)]
+
+library(gplots)
+library(RColorBrewer)
+my_palette <- colorRampPalette(c("grey","white","orange","orangered","darkred","black"))(n = 599)
+#pdf("./Figures/DE_lncRNAs_GTEX_heatmap.pdf", width = 16, height = 12)
+
+heatmap.2(exprMat , dendrogram = "row", trace="none", main="LncRNA Expression by Tissue-Type", notecol="black", key=TRUE, col=my_palette, symm=F, symkey=F, symbreaks=F, key.xlab="Median FPKM Scaled by LncRNA",RowSideColors = brain_colors, margins = c(6,12))
+#dev.off()
+
 ```
+
+<!-- ```{r GO Enrichment, cache = TRUE, message = FALSE} -->
+<!-- library(GOstats) -->
+<!-- library(org.Hs.eg.db) -->
+<!-- library(ggplot2) -->
+<!-- library(gridExtra) -->
+
+
+<!-- terms_full =data.frame() -->
+<!-- for ( mod in unique(moduleColors)){ -->
+
+<!-- paramMF <- new("GOHyperGParams", geneIds = genelist$entrez_id[genelist$Module== mod], universeGeneIds = genelist$entrez_id,  -->
+<!--              ontology = c("MF"), annotation = "org.Hs.eg", pvalueCutoff = 0.01, testDirection = "over") -->
+
+<!-- paramBP <- new("GOHyperGParams", geneIds = genelist$entrez_id[genelist$Module== mod], universeGeneIds = genelist$entrez_id,  -->
+<!--              ontology = c("BP"), annotation = "org.Hs.eg", pvalueCutoff = 0.01, testDirection = "over") -->
+<!-- hypMF <- hyperGTest(paramMF) -->
+<!-- hypBP <- hyperGTest(paramBP) -->
+
+<!-- termsMF = summary(hypMF) -->
+<!-- termsMF$type = "MF" -->
+<!-- termsMF$Module =  mod -->
+<!-- termsMF = rename(termsMF, GO_ID = GOMFID) -->
+
+<!-- termsBP = summary(hypBP) -->
+<!-- termsBP$type = "BP" -->
+<!-- termsBP$Module =  mod -->
+<!-- termsBP = rename(termsBP, GO_ID = GOBPID) -->
+
+<!-- termsMF$Pvalue = p.adjust(termsMF$Pvalue, method = "fdr" , n = length(termsMF$Pvalue)) -->
+<!-- termsBP$Pvalue = p.adjust(termsBP$Pvalue, method = "fdr" , n = length(termsBP$Pvalue)) -->
+
+<!-- terms = rbind(termsMF[1:3, ], termsBP[1:3, ]) -->
+
+<!-- terms_full = rbind(terms_full, terms) -->
+<!-- } -->
+
+<!-- terms_full = terms_full[rowSums(is.na(terms_full)) != ncol(terms),  ] -->
+
+<!-- write.csv(terms_full, "./WGCNA/Data/GOEnrichmentTable.csv") -->
+
+<!-- dir.create("./WGCNA/Figures/Expression_Trajectory") -->
+
+
+<!-- for (mod in 1:ncol(MEs0)){ -->
+<!--     modName = names(table(moduleColors))[mod] -->
+
+<!--     mod_terms = terms_full[terms_full$Module==modName, ] -->
+<!--     mod_terms = mod_terms[order(mod_terms$Pvalue), ] -->
+<!--     term_names = mod_terms$Term[order(mod_terms$Pvalue)] -->
+
+<!--     p1 = ggplot(mod_terms, aes( y=-log10(Pvalue), x=reorder(Term, Pvalue), fill= type)) + -->
+<!--         geom_bar( stat = "identity", position = position_dodge()) + theme_bw() + -->
+<!--         #theme(axis.text.x = element_text(angle = 90, hjust = 1)) + -->
+<!--         geom_hline(yintercept =  2, col = "red", lwd=1)+ -->
+<!--         coord_flip()+ -->
+<!--         ylab(expression(-Log[10]~Pvalue)) + xlab( "GO Term") +ggtitle(paste(paste0(toupper(substr(modName, 1, 1)), tolower(substring(modName, 2))), "Functional Enrichment") )+  -->
+<!--         scale_fill_manual(values=c("#56B4E9",  "#E69F00")) -->
+
+<!--     df = as.data.frame(cbind(Months=clinical$Months.Post.Conception[clinical$Months.Post.Conception <= 22], Expression = MEs0[,mod][clinical$Months.Post.Conception <= 22]) ) -->
+<!--     p2= ggplot(df, aes(x = Months, y=Expression), main = paste(paste0(toupper(substr(modName, 1, 1)), tolower(substring(modName, 2))), "Developmental Expression"), -->
+<!--                xlab="Post-Conception Developmental Months", ylab = "Module Eigengene (PC1)") + -->
+<!--         geom_point(shape=1, col ="grey") + theme_bw() +geom_jitter(alpha=0.7, shape=1)+ -->
+<!--         geom_smooth(method=loess, size=1, col= modName, alpha=.5)+ -->
+<!--         ggtitle(label = paste0(toupper(substr(modName, 1, 1)), tolower(substring(modName, 2))) ) + -->
+<!--         geom_vline(xintercept =  10, col="blue", lwd=1) -->
+
+<!--     pdf(paste0("./WGCNA/Figures/Expression_Trajectory/", modName, ".pdf"), width = 12, height= 12) -->
+<!--     grid.arrange(p1, p2, ncol=2) -->
+
+<!--     dev.off() -->
+<!-- } -->
+<!-- ``` -->
