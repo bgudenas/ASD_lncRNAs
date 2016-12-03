@@ -34,7 +34,10 @@ library(GenomicRanges)
 library(genefilter)
 library(gplots)
 library(RColorBrewer)
+library(GOstats)
+library(org.Hs.eg.db)
 options(stringsAsFactors=FALSE)
+enableWGCNAThreads()
 
 # Load in all Supplementary Input Data
 load(file="./Data/All_Sup_Data.RData")
@@ -54,7 +57,7 @@ rownames(res05) = unlist(lapply(strsplit(rownames(res05), "\\."),"[[",1)) ## rem
 
 #Use biomaRt to exract gene biotypes
 mart = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-map = getBM(mart = mart, attributes=c("ensembl_gene_id","gene_biotype","start_position","end_position","chromosome_name", "external_gene_name"),filters = "ensembl_gene_id", values=rownames(res05))
+map = getBM(mart = mart, attributes=c("ensembl_gene_id","gene_biotype","start_position","end_position","chromosome_name", "external_gene_name","entrezgene"),filters = "ensembl_gene_id", values=rownames(res05))
 
 sig_match = match(rownames(res05),  map$ensembl_gene_id)
 res05$gene_name = map$external_gene_name[sig_match]
@@ -93,11 +96,22 @@ mtext(c(paste("-", lfc, "fold"), paste("+", lfc, "fold")), side = 3, at = c(-lfc
 legend(3, 13, c("LncRNA","Non-lncRNA"), pch=c(1,1), col=c("blue","red3"))
 
 DEG =res05[res05$padj <= 0.05, ]
+# Next we perform GO enrichment for the Up- and Down-regulated differentially expressed genes
+paramBP_UP <- new("GOHyperGParams", geneIds = DEG$entrez[DEG$log2FoldChange > 0 ], universeGeneIds = res05$entrez_id,
+             ontology = c("BP"), annotation = "org.Hs.eg", pvalueCutoff = 0.01, testDirection = "over")
+paramBP_Down <- new("GOHyperGParams", geneIds = DEG$entrez[DEG$log2FoldChange < 0 ], universeGeneIds = res05$entrez_id,
+             ontology = c("BP"), annotation = "org.Hs.eg", pvalueCutoff = 0.01, testDirection = "over")
+hypUP <- hyperGTest(paramBP_UP)
+hypDown <- hyperGTest(paramBP_Down)
+termsUP = summary(hypUP)[1:4, ]
+termsDown = summary(hypDown)[1:4, ]
+termsUP #Up-regulated signficantly enriched biological processes
+termsDown #Down-regulated signficantly enriched biological processes
 # check # of significant DE lncRNAs
 table(DEG$lncRNA)
 ## check % of lncRNAs from each lncRNA biotype
 table(DEG$biotype[DEG$lncRNA])/sum(DEG$lncRNA)*100
-#write.csv(res05,"./Data/DEG_Results_alpha05.csv")
+write.csv(DEG,"./Data/DEG_Results_alpha05.csv")
 ```
 We have identified `r as.numeric(table(res05$lncRNA)[[2]])` differentially expressed lncRNAs (DE lncRNAs). Next, we will construct a weighted gene co-expression network using the BrainSpan Developmental transcriptome to infer the biological functions of these lncRNAs.
 
@@ -170,14 +184,16 @@ for (biotype in genelist$biotype) {
 }
 genelist$lncRNA = lnc_test
 
-LncRNA_Gr = makeGRangesFromDataFrame(DEG[DEG$lncRNA, colnames(DEG)=="chromosome" | colnames(DEG)=="start_pos" |  colnames(DEG)=="end_pos"], start.field = "start_pos", end.field = "end_pos" )
+LncRNA_Gr = makeGRangesFromDataFrame(genelist[genelist$lncRNA == TRUE & genelist$L2FC != 0, colnames(genelist)=="chromosome" | colnames(genelist)=="start" |  colnames(genelist)=="end" ])
+                                     
 genelist_Gr = makeGRangesFromDataFrame(genelist[genelist$lncRNA != TRUE & !is.na(genelist$start), colnames(genelist)=="chromosome" | colnames(genelist)=="start" |  colnames(genelist)=="end" ], start.field = "start", end.field = "end" )
 names(genelist_Gr) = genelist$gene_symbol[genelist$lncRNA != TRUE & !is.na(genelist$start) ]
 
 near_genes = names(genelist_Gr)[nearest(x = LncRNA_Gr, subject = genelist_Gr)]
-DEG$nearest[DEG$lncRNA] = near_genes
-DEG$nearest_ASD_score[DEG$lncRNA] = genelist$ASD_score[match( near_genes, genelist$gene_symbol)]
-DEG$Gene_symbol  = genelist$gene_symbol[match(rownames(DEG), genelist$ensembl_gene_id)]
+genelist$DEG_lncRNA_nearest_gene[genelist$lncRNA == TRUE & genelist$L2FC != 0] = near_genes
+genelist$nearest_ASD_score[genelist$lncRNA == TRUE & genelist$L2FC != 0] = as.character(genelist$ASD_score[match( near_genes, genelist$gene_symbol)])
+## Check how many DE lncRNAs nearest neighbor genes are ASD risk genes
+genelist[genelist$lncRNA==TRUE & genelist$L2FC !=0 & !is.na(genelist$nearest_ASD_score), -c(1,2,3)]
 
 table(rownames(clinical)==rownames(datExpr0)) ## verify clinical matches expression for all samples
 
@@ -204,7 +220,7 @@ Now we will check samples for outliers and subsequently create the gene co-expre
 ```{r create_network, eval=FALSE}
 load("./Data/pre_network.RData")
 
-sft=pickSoftThreshold(datExpr0, powerVector=powers, verbose=5, networkType="signed", corFnc = "bicor",corOptions = list(use = 'p', maxPOutliers = 0.1), blockSize = 27000)
+sft=pickSoftThreshold(datExpr0, powerVector=powers, verbose=5, networkType="signed", corFnc = "bicor",corOptions = list(use = 'p', maxPOutliers = 0.1), blockSize = 30000)
 
 sft$fitIndices
 #  Power  SFT.R.sq     slope truncated.R.sq   mean.k.  median.k.    max.k.
@@ -418,7 +434,7 @@ my_palette <- colorRampPalette(c("white","orange","red"))(n = 399)
  Modules_cap = paste0(toupper(substr(rownames(ad_p), 1, 1)), tolower(substring(rownames(ad_p), 2)))
 rownames(ad_p) = Modules_cap
 
-heatmap.2(ad_p, cellnote=OR_filter, trace="none", main="Module Gene Set Enrichment", RowSideColors=Modules_cap, notecol="black",key=TRUE, col=my_palette, symm=F, symkey=F, symbreaks=F, key.xlab="-Log( FDR adjusted p-value )", notecex =1.5, margins =c(13,8), breaks = seq(0, 15, length.out =400))
+heatmap.2(ad_p, cellnote=OR_filter, trace="none", main="Module Gene Set Enrichment", RowSideColors=Modules_cap, notecol="black",key=TRUE,dendrogram = "none", col=my_palette, symm=F, symkey=F, symbreaks=F, key.xlab="-Log( FDR adjusted p-value )", notecex =1.5, margins =c(13,8), breaks = seq(0, 15, length.out =400))
 ```
 
 Next we will validate the co-expression modules to ensure they are truly co-expressed
@@ -598,7 +614,7 @@ heatmap.2(exprMat , dendrogram = "row", trace="none", main="LncRNA Expression by
 
 
 ```{r GO Enrichment, cache = TRUE, message = FALSE, warning =FALSE}
-load(file="./Data/Post_geneinfo_network.RData")
+#load(file="./Data/Post_geneinfo_network.RData")
 library(GOstats)
 library(org.Hs.eg.db)
 
@@ -671,15 +687,15 @@ for (mod in interesting_mods){
     grid.arrange(p1, p2, ncol=2, nrow =1, widths = c(3.5,1))
 }
 ```
-CNV data from SFARI is in cytoband format (ex: 3q29) from different genome assemblies so we will need to create a function to convert all cytoband coordinates into hg28 genomic coordinates.
+CNV data from SFARI is in cytoband format (ex: 3q29) from different genome assemblies so we will need to create a function to convert all cytoband coordinates into hg38 genomic coordinates.
 
 ```{r cyto_converter, message=FALSE, warning=FALSE}
 library(R.utils)
 library(stringr)
 
 download.file(url = "http://hgdownload.cse.ucsc.edu/goldenPath/hg38/database/cytoBand.txt.gz", destfile = "cytoBand_HG38.txt.gz" , mode = "wb")
-R.utils:::gunzip("cytoBand_HG38.txt.gz")
-cytobands = read.table(file = "C:/Users/Brian/Google Drive/ASD_lncRNAs/cyto_converter/cytoBand_HG38.txt", sep = "\t")
+R.utils:::gunzip("cytoBand_HG38.txt.gz", skip=TRUE)
+cytobands = read.table(file = "./cytoBand_HG38.txt", sep = "\t")
 
 # Clean up cytobands ------------------------------------------------------
 colnames(cytobands) = c("Chromosome","Start","End","Band","Stain")
@@ -788,20 +804,14 @@ colnames(results_df)<-c("Cytoband","Chromosome","Start","End")
 return(results_df)
 }
 
-# test that cyto_converter works on input cytoband file
-cyto_test = cyto_converter(cytobands$Band, cytobands)
-table(cyto_test$Cytoband == cytobands$Band)
-
 ```
 Now we will use cyto_converter to convert SFARI ASD CNVs into genomic coordinates and then calculate overlaps with the differentially expressed lncRNAs.
 
-```{r CNV ranking, warning=FALSE}
-load(file="./Data/Post_geneinfo_network.RData")
-
-source("./cyto_converter/cyto_converter.R")
+```{r CNV ranking, warning=FALSE, message=FALSE}
+library(WGCNA)
+#source("./cyto_converter/cyto_converter.R")
 CNV_df = cyto_converter(CNVs$CNV.Locus, cytobands = cytobands)
 table(rowSums(is.na(CNV_df)))
-
 CNV_df = CNV_df[rowSums(is.na(CNV_df))==0, ]
 
 
@@ -812,32 +822,30 @@ names(genelist_Gr) = genelist$gene_symbol[!is.na(genelist$start) ]
 
 overlaps = countOverlaps( genelist_Gr, CNVs)
 genelist$overlaps = overlaps[match(genelist$gene_symbol, names(overlaps))]
-#genelist$overlaps[is.na(genelist$overlaps)] = 0
-library(dplyr)
-library(ggplot2)
-
 
 ranked = genelist[genelist$lncRNA == TRUE & genelist$L2FC !=0, ]
+ranked = select(ranked, -c(row_num, gene_id, entrez_id, chromosome, start,end, ASD_score, lncRNA, ME16))
 
-ranked$nearest = DEG$nearest[match(ranked$ensembl_gene_id, rownames(DEG))]
-ranked$nearest_L2FC = genelist$L2FC[match(ranked$nearest, genelist$gene_symbol)]
-
-ranked$nearest_ASD_score = DEG$nearest_ASD_score[match(ranked$ensembl_gene_id, rownames(DEG))]
+mod_BPs = terms_full %>% 
+    filter(type=="BP") %>% 
+    group_by(Module) %>% 
+    filter( Pvalue==min(Pvalue) & !duplicated(Pvalue)) 
+    
+ranked$Module_BP = mod_BPs$Term[match(ranked$Module, mod_BPs$Module)]
 
 top_cors = data.frame()
 for ( i in 1:nrow(ranked)){
     lncRNA = ranked$ensembl_gene_id[i]
     
-    lnc_expr = datExpr0[ ,colnames(datExpr0)==lncRNA]
+    lnc_expr = datExpr0[ ,colnames(datExpr0)== lncRNA]
     
-    cor_mat = bicor(datExpr0[ ,colnames(datExpr0)!=lncRNA & genelist$biotype=="protein_coding"], lnc_expr,  use="p", maxPOutliers = 0.1)
+    cor_mat = bicor(datExpr0[ , genelist$biotype=="protein_coding"], lnc_expr,  use="p", maxPOutliers = 0.1)
     #which.max(cor_mat)
     ind = cor_mat[which.max(cor_mat), ]
 
     gene_name = genelist[genelist$ensembl_gene_id == names(ind),  ]
-    E_ID = genelist$ensembl_gene_id[match(ranked$nearest[i], genelist$gene_symbol)]
-    near_cor = bicor(datExpr0[ ,colnames(datExpr0) == E_ID], lnc_expr,  use="p", maxPOutliers = 0.1)
-    gene_name$nearest_cor = near_cor
+    # near_cor = bicor(datExpr0[ ,colnames(datExpr0) == E_ID], lnc_expr,  use="p", maxPOutliers = 0.1)
+    # gene_name$nearest_cor = near_cor
     
     gene_name$Top_cor = as.numeric(ind)
     top_cors = rbind(top_cors, gene_name)
@@ -846,7 +854,7 @@ ranked = cbind(ranked,top_cors)
 
 ranked = ranked[order(ranked$overlaps, decreasing = TRUE), ]
 
-write.csv(ranked, "./WGCNA/Data/ranked_lncRNAs.csv")
+write.csv(ranked, "./Data/ranked_lncRNAs.csv")
 
 ```
 
