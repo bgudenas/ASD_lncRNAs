@@ -3,7 +3,7 @@ title: Integrative Genomic Analyses for Identification and Prioritization of Lon
   Non-Coding RNAs associated with Autism
 author: "Brian Gudenas"
 date: "November 11th, 2016"
-output: pdf_document
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -22,6 +22,27 @@ Genetic studies have identified many risk loci for autism spectrum disorder (ASD
 5) Create a function to process ASD-associated CNVs and examine overlaps with lncRNAs
 4) Filter and prioritize DE lncRNAs 
 
+### Input Data
+The Input file "All\_Sup\_data.RData" contains:
+
+- ASD cortex RNA-seq data: (GEO accession GSE30573)
+    + txi.salmon: Results from using tximport on transcript quantifications (quant.sf files) produced from Salmon
+    + DEG_sample: Sample metadata
+    
+- BrainSpan Developmental Transcriptome dataset:   downloaded from "http://www.brainspan.org/static/download.html"
+    + Bspan_rows: Gene level metadata (rows of Expr)
+    + clinical: Sample metadata (cols of Expr)
+    + Expr: Expression matrix
+    
+- ASD data : from "https://gene.sfari.org/autdb/HG_Home.do"
+    + SFARI: ASD risk gene list
+    + SFARI_scores: curated Risk scores for ASD risk gene list
+    + CNVs: ASD CNV summary data from SFARI
+    + ME16: ASD-associated Module gene list from Parikshak, 2013
+    
+- Gene Tissue Expression project data: from http://www.gtexportal.org/
+    + GTEx: Gene-level Median RPKM across tissue types
+    + GTEx_samples: Sample metadata
 
 ```{r tximport, eval=TRUE, cache=TRUE, message=FALSE, echo=TRUE}
 #load libraries
@@ -659,8 +680,6 @@ library(ggplot2)
 library(gridExtra)
 library(grid)
 interesting_mods = c("brown","black","blue") ## all modules enrriched for DE_lncRNAs and/or both ASD gene sets
-plot_vec = vector("list",length=length(interesting_mods))
-names(plot_vec) = interesting_mods
 colnames(MEs0) = stringr::str_sub(colnames(MEs0), start = 3)
 
 for (mod in interesting_mods){
@@ -682,7 +701,7 @@ for (mod in interesting_mods){
     p2= ggplot(df, aes(x = Months, y=Expression))+
         xlab("Months PC")+ ylab("Eigengene (PC1)") +
         geom_point(shape=1, col ="grey") + theme_bw() +geom_jitter(alpha=0.7, shape=1)+
-        geom_smooth(method=loess, size=1, col= mod, alpha=.5)
+        geom_smooth(method=loess, size=1, col= mod, alpha=.5)+
         geom_vline(xintercept =  10, col="blue", lwd=1)
     
         assign(paste0(mod,1), p1)
