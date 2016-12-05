@@ -3,7 +3,7 @@ title: Integrative Genomic Analyses for Identification and Prioritization of Lon
   Non-Coding RNAs associated with Autism
 author: "Brian Gudenas"
 date: "November 11th, 2016"
-output: html_document
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -813,6 +813,8 @@ return(results_df)
 Now we will use cyto_converter to convert SFARI ASD CNVs into genomic coordinates and then calculate overlaps with the differentially expressed lncRNAs. Finally, we will rank the DE lncRNAs based off of total CNV overlaps and create a prioritized table containing relevant information for the lncRNAs.
 
 ```{r CNV ranking, warning=FALSE, message=FALSE}
+library(dplyr)
+library(WGCNA)
 CNV_df = cyto_converter(CNVs$CNV.Locus, cytobands = cytobands)
 table(rowSums(is.na(CNV_df)))
 CNV_df = CNV_df[rowSums(is.na(CNV_df))==0, ]
