@@ -1,9 +1,8 @@
 ---
 title: Integrative Genomic Analyses for Identification and Prioritization of Long
   Non-Coding RNAs associated with Autism
-author: "Brian Gudenas"
-date: "November 11th, 2016"
-output: html_document
+authors: "Brian Gudenas, Anand K. Srivastava, Liangjiang Wang"
+output: word_document
 ---
 
 ```{r setup, include=FALSE}
@@ -12,7 +11,6 @@ knitr::opts_knit$set(root.dir = 'C:/Users/Brian/Google Drive/ASD_lncRNAs')
 ```
 ## Concise Description
 Genetic studies have identified many risk loci for autism spectrum disorder (ASD) although causal factors in the majority of cases are still unknown. We developed a methodology for the integration of public genomic datasets to identify lncRNAs associated with ASD. This method utilizes differential gene expression patterns in affected-tissues in conjunction with gene co-expression networks in tissue-matched non-affected samples. We analyzed RNA-seq data from the cortical tissue of brains from ASD cases and controls to identify lncRNAs differentially expressed in ASD. We derived a gene co-expression network from an independent human brain developmental transcriptome and detected a convergence of the differentially expressed lncRNAs and known ASD risk genes into specific gene co-expression modules. Co-expression network analysis facilitates the discovery of associations between previously uncharacterized lncRNAs with known ASD risk genes, affected molecular pathways and at-risk developmental time points. In addition, we show that some of these lncRNAs have a high degree of overlap with major CNVs detected in ASD sequencing studies. Utilizing an integrative approach comprised of differential expression analysis in affected tissues and connectivity metrics from a developmental co-expression network, we have prioritized a set of candidate ASD-associated lncRNAs. The identification of lncRNAs as novel ASD susceptibility genes could help explain the genetic pathogenesis of ASD
-
 
 ### Main Objectives
 1) Identify lncRNAs differentially expressed (DE lncRNAs) in the ASD cortex (SRP007483)
@@ -73,9 +71,8 @@ dds = DESeqDataSetFromTximport(txi.salmon, DEG_samples, ~Class)
 dds_DE =DESeq(dds)
 res05 =results(dds_DE, alpha = 0.05, contrast = c("Class","ASD","Con")) 
 
-# pdf("./Figures/MA_plot.pdf")
+
 plotMA(res05, main="MA plot of ASD/Con fold change", ylim=c(-4,4))
-# dev.off()
 res05= res05[!is.na(res05$padj), ]  
 rownames(res05) = unlist(lapply(strsplit(rownames(res05), "\\."),"[[",1)) ## remove trailing decimals
 
@@ -120,6 +117,7 @@ mtext(c(paste("-", lfc, "fold"), paste("+", lfc, "fold")), side = 3, at = c(-lfc
 legend(3, 13, c("LncRNA","Non-lncRNA"), pch=c(1,1), col=c("blue","red3"))
 
 DEG =res05[res05$padj <= 0.05, ]
+
 # Next we perform GO enrichment for the Up- and Down-regulated differentially expressed genes
 paramBP_UP <- new("GOHyperGParams", geneIds = DEG$entrez[DEG$log2FoldChange > 0 ], universeGeneIds = res05$entrez_id,
              ontology = c("BP"), annotation = "org.Hs.eg", pvalueCutoff = 0.01, testDirection = "over")
@@ -185,6 +183,8 @@ DEG_map = match(genelist$ensembl_gene_id, rownames(DEG))
 
 genelist$L2FC = DEG$log2FoldChange[DEG_map]
 genelist$L2FC[is.na(genelist$L2FC)] = 0    ### Give 0 to any gene not Differentially expressed
+genelist$Qval = DEG$padj[DEG_map]
+
 ## number of DEG genes not present in the filtered BrainSpan Dataset
 nrow(DEG) - table(genelist$L2FC!=0)[[2]]
 
@@ -631,7 +631,7 @@ brain_colors[grepl("brain", str_to_lower(colnames(exprMat)))] = "blue"
 exprMat = scale(t(exprMat))
 exprMat = exprMat[ ,colSums(is.na(exprMat))!=nrow(exprMat)]
 
-my_palette <- colorRampPalette(c("grey","white","orange","orangered","darkred","black"))(n = 599)
+my_palette = colorRampPalette(c("grey","white","orange","orangered","darkred","black"))(n = 599)
 
 heatmap.2(exprMat , dendrogram = "row", trace="none", main="LncRNA Expression by Tissue-Type", notecol="black", key=TRUE, col=my_palette, symm=F, symkey=F, symbreaks=F, key.xlab="Median FPKM Scaled by LncRNA",RowSideColors = brain_colors, margins = c(6,12))
 ```
@@ -724,7 +724,7 @@ cytobands = read.table(file = "./cytoBand_HG38.txt", sep = "\t")
 # Clean up cytobands ------------------------------------------------------
 colnames(cytobands) = c("Chromosome","Start","End","Band","Stain")
 cytobands$Chromosome = as.character(stringr::str_sub(cytobands$Chromosome, start=4))
-### make band entries are written in full with chromosome prefix Ex. 1q43.1
+### make band entries  written in full with chromosome prefix Ex. 1q43.1
 cytobands$Band = paste0(cytobands$Chromosome, cytobands$Band)
 cytobands = cytobands[nchar(cytobands$Chromosome) <= 2, ] ## remove alt haplotypes
 cytobands = cytobands[cytobands$Chromosome != "M",  ] ## remove mitochondria
@@ -770,15 +770,15 @@ cyto_converter = function(bands, cytobands){
 #bands is a list of cytobands for conversion (including chromosome prefix)
 #cytobands is a reference dataframe from UCSC with 1st,2nd,3rd,4th columns being Chromosome, Start, End, Band
     bands = as.character(bands)
-    starts_vec= vector(mode = "list", length = length(bands))
-    ends_vec= vector(mode = "list", length = length(bands))
-    chrom_vec= vector(mode = "list", length = length(bands))
+    starts_vec = vector(mode = "list", length = length(bands))
+    ends_vec = vector(mode = "list", length = length(bands))
+    chrom_vec = vector(mode = "list", length = length(bands))
     
     for (i in 1:length(bands)){
 
-        chrom= strsplit(bands[i],"p|q")[[1]][1] #split band on p OR q and select first element
-        chrom_vec[i]=chrom
-        if (grepl("-",bands[i])) {  ##### this chunk deals with joined cytobands. EX. 1q43-1q42
+        chrom = strsplit(bands[i],"p|q")[[1]][1] #split band on p OR q and select first element
+        chrom_vec[i] = chrom
+        if (grepl("-",bands[i])) {  ##### this chunk handles joined cytobands. EX. 1q43-1q42
             band_split = strsplit(bands[i],"-")[[1]]
             band_start = band_split[1]
             band_end = paste0(chrom, band_split[2])
@@ -786,15 +786,15 @@ cyto_converter = function(bands, cytobands){
             e_pos = cytobands[cytobands$Band == band_end, 3]
             
             if (!(length(s_pos))) {
-                if (sum(grepl(band_start, cytobands$Band[cytobands$Chromosome==chrom]))!=0) {
+                if (sum(grepl(band_start, cytobands$Band[cytobands$Chromosome==chrom])) !=0) {
                     matches = cytobands[grepl(band_start, cytobands$Band), ]
                     starts_vec[i] = min(matches[, 2])
                 } else  {
-                    starts_vec[i]= degenerate(band_start, chrom)[1]
+                    starts_vec[i] = degenerate(band_start, chrom)[1]
                         }
                                   } else starts_vec[i] = s_pos
             if (!(length(e_pos))) {
-                if (sum(grepl(band_end, cytobands$Band[cytobands$Chromosome==chrom]))!=0){
+                if (sum(grepl(band_end, cytobands$Band[cytobands$Chromosome == chrom])) != 0){
                     matches = cytobands[grepl(band_end, cytobands$Band), ]
                     ends_vec[i] = max(matches[, 3])
                         } else  {
