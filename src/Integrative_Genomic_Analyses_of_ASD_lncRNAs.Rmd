@@ -886,7 +886,6 @@ write.csv(ranked, "./Data/ranked_lncRNAs.csv", row.names = FALSE)
 
 ```{r LncRNA Characteristics}
 
-
 lncRNAs %>% 
     group_by(Module) %>% 
     filter(n() > 3) %>% 
@@ -897,7 +896,6 @@ lncRNAs %>%
     scale_y_continuous(NULL, expand = c(0, 0))+
     coord_polar(theta="y") +
     scale_fill_manual(values = c("black","blue", "brown","green","grey","turquoise"))
-
 
 
 # Tissue_specificity ------------------------------------------------------
