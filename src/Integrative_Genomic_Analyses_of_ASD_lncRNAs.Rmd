@@ -398,6 +398,7 @@ names(GSPvalue) = paste("p.GS.", names(age), sep="");
 geneInfo= data.frame(Ensembl_ID = genelist$ensembl_gene_id,
                      gene_symbol= genelist$gene_symbol,
                      Log2FC_DE = genelist$L2FC,
+                     Log2FC_Qval = genelist$Qval,
                      lncRNA=genelist$lncRNA,
                      ASD=genelist$ASD_score,
                      moduleColor = moduleColors,
@@ -882,3 +883,67 @@ head(ranked)
 write.csv(ranked, "./Data/ranked_lncRNAs.csv", row.names = FALSE)
 ```
 
+
+```{r LncRNA Characteristics}
+
+
+lncRNAs %>% 
+    group_by(Module) %>% 
+    filter(n() > 3) %>% 
+    ggplot(  aes(factor(1),  fill = Module)) +
+    theme_bw() +
+    geom_bar(width =1) +
+    scale_x_discrete(NULL, expand = c(0, 0)) +
+    scale_y_continuous(NULL, expand = c(0, 0))+
+    coord_polar(theta="y") +
+    scale_fill_manual(values = c("black","blue", "brown","green","grey","turquoise"))
+
+
+
+# Tissue_specificity ------------------------------------------------------
+GTEx = read.csv("./Data/RAW/GTEx/GTEx_Analysis_v6_RNA-seq_RNA-SeQCv1.1.8_gene_median_rpkm.csv")
+GTEx_samples = read.csv("./Data/RAW/GTEx//GTEx_sample_metadata.csv")
+Ensembls = unlist(lapply(strsplit(as.character(GTEx$Ensembl_gene_ID),"\\."), "[[",1))
+rownames(GTEx) = Ensembls
+GTEx = GTEx[ ,-c(1,2)]
+
+GTEx_samples = GTEx_samples[order(GTEx_samples$Tissue), ]  ## reorder samples to match GTEx columns (alphabetical)
+GTEx = GTEx[ , GTEx_samples$Number.of.RNASeq.Samples > 50]
+
+
+match_GTEx = match(rownames(GTEx), lncRNAs$ensembl_gene_id)
+
+GTEx = GTEx[!is.na(match_GTEx), ]
+
+library(stringr)
+brain_colors = rep("white", ncol(GTEx))
+brain_colors[grepl("brain", str_to_lower(colnames(GTEx)))] = "blue"
+
+brain_ratios = vector(mode = "numeric", length = nrow(GTEx))
+for ( i in 1:nrow(GTEx)){
+    brain_ratios[i] = sum(GTEx[i, brain_colors=="blue"])/sum(GTEx[i,]) * 100
+}
+
+lncRNAs$Brain_ratio = brain_ratios[match(lncRNAs$ensembl_gene_id, rownames(GTEx))]
+
+
+lncRNAs %>% 
+    group_by(Module) %>% 
+    filter(n() > 3) %>% 
+    summarise(mean_brain = mean(Brain_ratio, na.rm =TRUE), sd = sd(Brain_ratio, na.rm = TRUE)) %>% 
+    ggplot() +
+    geom_bar(mapping = aes(x=Module,y=mean_brain, fill = Module), stat = "identity") +
+    scale_fill_manual(values = c("black","blue", "brown","green","grey","turquoise"))+
+    theme_bw()+
+    geom_hline(yintercept = 50, col="red")
+
+
+lncRNAs %>% 
+    group_by(Module) %>% 
+    filter(n() > 3) %>% 
+    summarise(CNV_overlaps = sum(overlaps, na.rm =TRUE)) %>% 
+    ggplot() +
+    geom_bar(mapping = aes(x=Module,y = CNV_overlaps, fill = Module), stat = "identity") +
+    scale_fill_manual(values = c("black","blue", "brown","green","grey","turquoise"))+
+    theme_bw()
+```
