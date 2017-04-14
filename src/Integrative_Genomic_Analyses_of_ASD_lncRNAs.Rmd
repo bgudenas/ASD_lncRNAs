@@ -946,4 +946,5 @@ lncRNAs %>%
     geom_bar(mapping = aes(x=Module,y = CNV_overlaps, fill = Module), stat = "identity") +
     scale_fill_manual(values = c("black","blue", "brown","green","grey","turquoise"))+
     theme_bw()
+
 ```
